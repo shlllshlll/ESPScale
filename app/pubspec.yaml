@@ -1,0 +1,28 @@
+name: esp_scale_app
+description: ESPScale cross-platform app for IoT weighing.
+publish_to: 'none'
+version: 0.2.0
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^2.5.1
+  dio: ^5.4.0
+  web_socket_channel: ^2.4.0
+  fl_chart: ^0.68.0
+  shared_preferences: ^2.2.2
+  intl: ^0.19.0
+  flutter_blue_plus: ^1.31.16
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/icons/
