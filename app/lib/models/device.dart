@@ -7,6 +7,7 @@ class DeviceModel {
   final String unit;
   final String mode;
   final String firmwareVer;
+  final int uploadIntervalMs;
   final DateTime? lastSeen;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -20,6 +21,7 @@ class DeviceModel {
     this.unit = 'g',
     this.mode = 'remote',
     this.firmwareVer = '',
+    this.uploadIntervalMs = 5000,
     this.lastSeen,
     required this.createdAt,
     required this.updatedAt,
@@ -35,6 +37,7 @@ class DeviceModel {
       unit: json['unit'] as String? ?? 'g',
       mode: json['mode'] as String? ?? 'remote',
       firmwareVer: json['firmware_ver'] as String? ?? '',
+      uploadIntervalMs: json['upload_interval_ms'] as int? ?? 5000,
       lastSeen: json['last_seen'] != null ? DateTime.tryParse(json['last_seen']) : null,
       createdAt: DateTime.tryParse(json['created_at'] ?? '') ?? DateTime.now(),
       updatedAt: DateTime.tryParse(json['updated_at'] ?? '') ?? DateTime.now(),
@@ -50,5 +53,6 @@ class DeviceModel {
         'unit': unit,
         'mode': mode,
         'firmware_ver': firmwareVer,
+        'upload_interval_ms': uploadIntervalMs,
       };
 }

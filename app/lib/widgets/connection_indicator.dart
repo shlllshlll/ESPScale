@@ -9,7 +9,7 @@ class ConnectionIndicator extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final connState = ref.watch(bleConnectionProvider).valueOrNull;
+    final connState = ref.watch(bleConnectionProvider).value;
     final isBle = connState == BluetoothConnectionState.connected;
 
     return Tooltip(

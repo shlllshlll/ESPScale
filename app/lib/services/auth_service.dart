@@ -36,27 +36,29 @@ class AuthService {
 
 final authServiceProvider = Provider<AuthService>((ref) => AuthService());
 
-final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  return AuthNotifier(ref.read(authServiceProvider));
-});
+final authProvider = NotifierProvider<AuthNotifier, AuthState>(
+  AuthNotifier.new,
+);
 
-class AuthNotifier extends StateNotifier<AuthState> {
-  final AuthService _service;
-  AuthNotifier(this._service) : super(const AuthState()) {
-    _init();
+class AuthNotifier extends Notifier<AuthState> {
+  @override
+  AuthState build() {
+    Future.microtask(() => _init());
+    return const AuthState();
   }
 
   Future<void> _init() async {
-    state = await _service.loadAuth();
+    final authService = ref.read(authServiceProvider);
+    state = await authService.loadAuth();
   }
 
   Future<void> login(String token, String email) async {
-    await _service.saveAuth(token, email);
+    await ref.read(authServiceProvider).saveAuth(token, email);
     state = AuthState(isLoggedIn: true, token: token, email: email);
   }
 
   Future<void> logout() async {
-    await _service.logout();
+    await ref.read(authServiceProvider).logout();
     state = const AuthState();
   }
 }

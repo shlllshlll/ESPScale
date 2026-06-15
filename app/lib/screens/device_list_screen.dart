@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config.dart';
 import '../models/device.dart';
 import '../providers/app_providers.dart';
+import '../services/auth_service.dart';
 import '../services/ble_service.dart';
 import '../widgets/ble_scan_list.dart';
 import '../widgets/device_card.dart';
@@ -104,7 +105,7 @@ class _BLEPanelState extends ConsumerState<BLEPanel> {
   void _startScan() {
     _scanSub?.cancel();
     _scanSub = ref.read(bleServiceProvider).scanForScales().listen((results) {
-      if (mounted) ref.read(bleScanResultsProvider.notifier).state = results;
+      if (mounted) ref.read(bleScanResultsProvider.notifier).set(results);
     });
   }
 
