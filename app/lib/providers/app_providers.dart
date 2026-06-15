@@ -1,3 +1,4 @@
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/device.dart';
@@ -35,11 +36,29 @@ final bleConnectionProvider = StreamProvider<BluetoothConnectionState>((ref) {
   return ref.read(bleServiceProvider).connectionState;
 });
 
-final bleScanResultsProvider = StateProvider<List<ScanResult>>((ref) => []);
+final bleScanResultsProvider = NotifierProvider<BleScanResultsNotifier, List<ScanResult>>(
+  BleScanResultsNotifier.new,
+);
+
+class BleScanResultsNotifier extends Notifier<List<ScanResult>> {
+  @override
+  List<ScanResult> build() => [];
+
+  void set(List<ScanResult> results) => state = results;
+}
 
 enum WeightSource { ble, ws, none }
 
-final weightSourceProvider = StateProvider<WeightSource>((ref) => WeightSource.none);
+final weightSourceProvider = NotifierProvider<WeightSourceNotifier, WeightSource>(
+  WeightSourceNotifier.new,
+);
+
+class WeightSourceNotifier extends Notifier<WeightSource> {
+  @override
+  WeightSource build() => WeightSource.none;
+
+  void set(WeightSource source) => state = source;
+}
 
 final liveWeightProvider = StreamProvider<WeightReading>((ref) {
   final source = ref.watch(weightSourceProvider);

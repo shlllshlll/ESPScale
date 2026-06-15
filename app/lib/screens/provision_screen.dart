@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config.dart';
 import '../providers/app_providers.dart';
+import '../services/api_service.dart';
 import '../services/ble_service.dart';
 
 class ProvisionScreen extends ConsumerStatefulWidget {

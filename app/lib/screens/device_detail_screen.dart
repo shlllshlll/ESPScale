@@ -6,6 +6,7 @@ import '../models/device.dart';
 import '../models/weight_record.dart';
 import '../providers/app_providers.dart';
 import '../services/api_service.dart';
+import '../services/auth_service.dart';
 import '../services/ble_service.dart';
 import '../services/ws_service.dart';
 import '../widgets/connection_indicator.dart';
@@ -56,13 +57,13 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
     if (token != null) {
       ws.setToken(token);
       ws.connect(widget.deviceId);
-      ref.read(weightSourceProvider.notifier).state = WeightSource.ws;
+      ref.read(weightSourceProvider.notifier).set(WeightSource.ws);
     }
   }
 
   @override
   void dispose() {
-    ref.read(weightSourceProvider.notifier).state = WeightSource.none;
+    ref.read(weightSourceProvider.notifier).set(WeightSource.none);
     super.dispose();
   }
 
@@ -74,7 +75,7 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final weightReading = ref.watch(liveWeightProvider).valueOrNull;
+    final weightReading = ref.watch(liveWeightProvider).value;
 
     return Scaffold(
       appBar: AppBar(

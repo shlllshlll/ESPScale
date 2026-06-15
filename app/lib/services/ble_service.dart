@@ -49,7 +49,7 @@ class BleService {
 
   Future<void> connect(String deviceId) async {
     _device = BluetoothDevice.fromId(deviceId);
-    await _device!.connect(autoConnect: false);
+    await _device!.connect(autoConnect: false, license: License.nonprofit);
     _connStateController.add(BluetoothConnectionState.connected);
     await _device!.discoverServices();
   }
