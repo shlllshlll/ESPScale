@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../config.dart';
 import '../models/device.dart';
 
 class DeviceCard extends StatelessWidget {

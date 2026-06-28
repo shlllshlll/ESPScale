@@ -1,10 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, Header, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import hash_api_key
 from database import get_db
-from deps import get_current_user
 from models import Device
 from schemas import DeviceRegister, DeviceResponse, DeviceUpdate
 
@@ -25,6 +24,7 @@ async def register_device(
         name=body.name or body.device_id,
         api_key_hash=hash_api_key(body.api_key),
         firmware_ver=body.firmware_ver,
+        mode="http_direct",
     )
     db.add(device)
     await db.commit()
@@ -32,10 +32,9 @@ async def register_device(
     return device
 
 
-@router.get("/", response_model=list[DeviceResponse])
+@router.get("", response_model=list[DeviceResponse])
 async def list_devices(
     db: AsyncSession = Depends(get_db),
-    _user: dict = Depends(get_current_user),
 ):
     result = await db.execute(select(Device).order_by(Device.updated_at.desc()))
     return result.scalars().all()
@@ -45,7 +44,6 @@ async def list_devices(
 async def get_device(
     device_id: str,
     db: AsyncSession = Depends(get_db),
-    _user: dict = Depends(get_current_user),
 ):
     result = await db.execute(select(Device).where(Device.device_id == device_id))
     device = result.scalar_one_or_none()
@@ -59,7 +57,6 @@ async def update_device(
     device_id: str,
     body: DeviceUpdate,
     db: AsyncSession = Depends(get_db),
-    _user: dict = Depends(get_current_user),
 ):
     result = await db.execute(select(Device).where(Device.device_id == device_id))
     device = result.scalar_one_or_none()
@@ -79,7 +76,6 @@ async def update_device(
 async def delete_device(
     device_id: str,
     db: AsyncSession = Depends(get_db),
-    _user: dict = Depends(get_current_user),
 ):
     result = await db.execute(select(Device).where(Device.device_id == device_id))
     device = result.scalar_one_or_none()

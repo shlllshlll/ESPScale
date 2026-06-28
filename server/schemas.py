@@ -16,6 +16,8 @@ class DeviceUpdate(BaseModel):
     upload_interval_ms: Optional[int] = None
     unit: Optional[str] = None
     mode: Optional[str] = None
+    server_url: Optional[str] = None
+    mqtt_broker: Optional[str] = None
 
 
 class DeviceResponse(BaseModel):
@@ -25,6 +27,8 @@ class DeviceResponse(BaseModel):
     unit: str
     upload_interval_ms: int
     mode: str
+    server_url: Optional[str] = None
+    mqtt_broker: Optional[str] = None
     last_weight: Optional[float]
     last_seen: Optional[datetime.datetime]
     is_online: bool

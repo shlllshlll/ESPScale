@@ -55,6 +55,20 @@ async def ingest_weight(
     device.is_online = True
 
     await db.commit()
+
+    # Broadcast to WebSocket clients
+    from routes.ws import manager
+
+    await manager.broadcast(device.device_id, {
+        "type": "weight_update",
+        "device_id": device.device_id,
+        "data": {
+            "weight": body.weight,
+            "unit": body.unit,
+            "timestamp": body.timestamp,
+            "seq": body.seq,
+        },
+    })
     return {"ok": True}
 
 
@@ -85,6 +99,23 @@ async def ingest_weight_batch(
         device.is_online = True
 
     await db.commit()
+
+    # Broadcast last record to WebSocket clients
+    if body.records:
+        from routes.ws import manager
+
+        last = body.records[-1]
+        await manager.broadcast(device.device_id, {
+            "type": "weight_update",
+            "device_id": device.device_id,
+            "data": {
+                "weight": last.weight,
+                "unit": last.unit,
+                "timestamp": last.timestamp,
+                "seq": last.seq,
+            },
+        })
+
     return {"ok": True, "count": len(body.records)}
 
 

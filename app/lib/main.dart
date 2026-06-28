@@ -5,7 +5,6 @@ import 'screens/calibration_screen.dart';
 import 'screens/device_detail_screen.dart';
 import 'screens/device_list_screen.dart';
 import 'screens/device_settings_screen.dart';
-import 'screens/login_screen.dart';
 import 'screens/provision_screen.dart';
 import 'screens/settings_screen.dart';
 
@@ -31,12 +30,10 @@ class ESPScaleApp extends StatelessWidget {
         useMaterial3: true,
         brightness: Brightness.dark,
       ),
-      initialRoute: '/login',
+      initialRoute: '/devices',
       onGenerateRoute: (settings) {
         Widget page;
         switch (settings.name) {
-          case '/login':
-            page = const LoginScreen();
           case '/devices':
             page = const DeviceListScreen();
           case '/provision':
@@ -53,7 +50,7 @@ class ESPScaleApp extends StatelessWidget {
           case '/app-settings':
             page = const AppSettingsScreen();
           default:
-            page = const LoginScreen();
+            page = const DeviceListScreen();
         }
         return MaterialPageRoute(builder: (_) => page);
       },

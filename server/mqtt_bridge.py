@@ -108,11 +108,12 @@ class MqttBridge:
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
         self.client.connect_async(MQTT_BROKER_HOST, MQTT_BROKER_PORT, 60)
-        self.client.socket().setblocking(False)
+        self.client.loop_start()
         logger.info("MQTT bridge started")
 
     async def stop(self):
         self._running = False
         if self.client:
+            self.client.loop_stop()
             self.client.disconnect()
         logger.info("MQTT bridge stopped")

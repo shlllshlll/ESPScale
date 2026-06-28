@@ -6,6 +6,8 @@ class DeviceModel {
   final double calFactor;
   final String unit;
   final String mode;
+  final String? serverUrl;
+  final String? mqttBroker;
   final String firmwareVer;
   final int uploadIntervalMs;
   final DateTime? lastSeen;
@@ -20,6 +22,8 @@ class DeviceModel {
     this.calFactor = 397.6,
     this.unit = 'g',
     this.mode = 'remote',
+    this.serverUrl,
+    this.mqttBroker,
     this.firmwareVer = '',
     this.uploadIntervalMs = 5000,
     this.lastSeen,
@@ -36,6 +40,8 @@ class DeviceModel {
       calFactor: (json['cal_factor'] as num?)?.toDouble() ?? 397.6,
       unit: json['unit'] as String? ?? 'g',
       mode: json['mode'] as String? ?? 'remote',
+      serverUrl: json['server_url'] as String?,
+      mqttBroker: json['mqtt_broker'] as String?,
       firmwareVer: json['firmware_ver'] as String? ?? '',
       uploadIntervalMs: json['upload_interval_ms'] as int? ?? 5000,
       lastSeen: json['last_seen'] != null ? DateTime.tryParse(json['last_seen']) : null,
@@ -52,6 +58,8 @@ class DeviceModel {
         'cal_factor': calFactor,
         'unit': unit,
         'mode': mode,
+        'server_url': serverUrl,
+        'mqtt_broker': mqttBroker,
         'firmware_ver': firmwareVer,
         'upload_interval_ms': uploadIntervalMs,
       };

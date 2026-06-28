@@ -4,10 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../config.dart';
-import '../models/device.dart';
 import '../providers/app_providers.dart';
-import '../services/auth_service.dart';
 import '../services/ble_service.dart';
 import '../widgets/ble_scan_list.dart';
 import '../widgets/device_card.dart';
@@ -47,13 +44,6 @@ class _DeviceListScreenState extends ConsumerState<DeviceListScreen>
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () => ref.read(deviceListProvider.notifier).refresh(),
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await ref.read(authProvider.notifier).logout();
-              if (mounted) Navigator.of(context).pushReplacementNamed('/login');
-            },
           ),
         ],
         bottom: TabBar(controller: _tabCtrl, tabs: const [
@@ -95,11 +85,18 @@ class BLEPanel extends ConsumerStatefulWidget {
 
 class _BLEPanelState extends ConsumerState<BLEPanel> {
   StreamSubscription<List<ScanResult>>? _scanSub;
+  StreamSubscription<BluetoothAdapterState>? _adapterSub;
+  BluetoothAdapterState _adapterState = BluetoothAdapterState.unknown;
 
   @override
   void initState() {
     super.initState();
-    _startScan();
+    _adapterState = FlutterBluePlus.adapterStateNow;
+    _adapterSub = FlutterBluePlus.adapterState.listen((state) {
+      setState(() => _adapterState = state);
+      if (state == BluetoothAdapterState.on) _startScan();
+    });
+    if (_adapterState == BluetoothAdapterState.on) _startScan();
   }
 
   void _startScan() {
@@ -112,11 +109,21 @@ class _BLEPanelState extends ConsumerState<BLEPanel> {
   @override
   void dispose() {
     _scanSub?.cancel();
+    _adapterSub?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_adapterState == BluetoothAdapterState.unauthorized) {
+      return const Center(child: Text('Bluetooth permission denied'));
+    }
+    if (_adapterState == BluetoothAdapterState.unknown) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_adapterState != BluetoothAdapterState.on) {
+      return const Center(child: Text('Bluetooth adapter is off'));
+    }
     final results = ref.watch(bleScanResultsProvider);
     if (results.isEmpty) {
       return const Center(child: Text('No nearby ESPScale devices'));

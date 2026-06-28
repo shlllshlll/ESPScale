@@ -31,5 +31,22 @@ constexpr unsigned long WIFI_RECONNECT_BASE_MS = 5000;
 constexpr const char* FIRMWARE_VERSION = "0.2.0";
 constexpr const char* DEVICE_NAME_PREFIX = "ESPScale-";
 
+// --- 服务器地址 ---
+constexpr const char* DEFAULT_SERVER_URL = "http://espscale.shlll.top";
+
+// --- 上报模式 ---
+constexpr uint8_t MODE_HTTP_DIRECT = 0;
+constexpr uint8_t MODE_MQTT = 1;
+constexpr uint8_t MODE_BLE_ONLY = 2;
+
+// --- HTTP ---
+constexpr unsigned long HTTP_TIMEOUT_MS = 10000;
+constexpr unsigned long HTTP_POST_INTERVAL_MS = 5000;
+
+// --- MQTT ---
+constexpr unsigned long MQTT_CONNECT_TIMEOUT_MS = 10000;
+constexpr unsigned long MQTT_RECONNECT_BASE_MS = 5000;
+constexpr uint8_t MQTT_MAX_RETRY = 3;
+
 // --- NVS ---
 constexpr const char* NVS_NAMESPACE = "espscale";
