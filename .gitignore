@@ -14,3 +14,9 @@ data/
 
 # Docker
 .mosquitto_data/
+
+# Flutter devtools local config
+app/devtools_options.yaml
+
+# Local SQLite database
+server/espscale.db

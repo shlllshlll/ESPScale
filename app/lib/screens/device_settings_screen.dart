@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../models/device.dart';
+import '../config.dart';
 import '../services/api_service.dart';
 import '../providers/app_providers.dart';
 
@@ -16,7 +16,9 @@ class DeviceSettingsScreen extends ConsumerStatefulWidget {
 class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
   final _nameCtrl = TextEditingController();
   final _unitCtrl = TextEditingController();
+  final _serverUrlCtrl = TextEditingController();
   int _uploadInterval = 5000;
+  String _mode = 'http_direct';
   bool _loading = true;
 
   @override
@@ -33,6 +35,8 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
         _nameCtrl.text = device.name;
         _unitCtrl.text = device.unit;
         _uploadInterval = device.uploadIntervalMs;
+        _mode = device.mode;
+        _serverUrlCtrl.text = device.serverUrl ?? '';
         setState(() => _loading = false);
       }
     } catch (e) {
@@ -46,6 +50,8 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
       'name': _nameCtrl.text.trim(),
       'unit': _unitCtrl.text.trim(),
       'upload_interval_ms': _uploadInterval,
+      'mode': _mode,
+      'server_url': _serverUrlCtrl.text.trim(),
     });
     await ref.read(deviceListProvider.notifier).refresh();
     if (mounted) Navigator.pop(context);
@@ -55,6 +61,7 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
   void dispose() {
     _nameCtrl.dispose();
     _unitCtrl.dispose();
+    _serverUrlCtrl.dispose();
     super.dispose();
   }
 
@@ -78,7 +85,7 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
           ),
           const SizedBox(height: 16),
           DropdownButtonFormField<int>(
-            value: _uploadInterval,
+            initialValue: _uploadInterval,
             decoration: const InputDecoration(labelText: 'Upload Interval'),
             items: const [
               DropdownMenuItem(value: 1000, child: Text('1 second')),
@@ -91,6 +98,39 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
               if (v != null) setState(() => _uploadInterval = v);
             },
           ),
+          const SizedBox(height: 16),
+          const Text('Report Mode', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+          const SizedBox(height: 8),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'http_direct', label: Text('HTTP'), icon: Icon(Icons.http, size: 18)),
+              ButtonSegment(value: 'mqtt', label: Text('MQTT'), icon: Icon(Icons.router, size: 18)),
+              ButtonSegment(value: 'ble_only', label: Text('BLE'), icon: Icon(Icons.bluetooth, size: 18)),
+            ],
+            selected: {_mode},
+            onSelectionChanged: (sel) => setState(() => _mode = sel.first),
+          ),
+          const SizedBox(height: 12),
+          if (_mode == 'http_direct') ...[
+            TextField(
+              controller: _serverUrlCtrl,
+              decoration: InputDecoration(
+                labelText: 'Server URL',
+                prefixIcon: const Icon(Icons.dns),
+                hintText: getDefaultApiBaseUrl(),
+              ),
+              keyboardType: TextInputType.url,
+            ),
+          ],
+          if (_mode == 'ble_only')
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text('BLE-only: no server needed.'),
+            ),
           const SizedBox(height: 32),
           ElevatedButton.icon(
             onPressed: _save,

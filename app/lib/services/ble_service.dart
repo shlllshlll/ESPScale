@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math';
 
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,30 +17,58 @@ class ProvisionResult {
 
 class BleService {
   BluetoothDevice? _device;
-  final _connStateController = StreamController<BluetoothConnectionState>.broadcast();
+  BluetoothConnectionState _connState = BluetoothConnectionState.disconnected;
+  late final StreamController<BluetoothConnectionState> _connStateController;
+
+  BleService() {
+    _connStateController = StreamController<BluetoothConnectionState>.broadcast(
+      onListen: () {
+        // Replay the last known state to new listeners (e.g. after navigation)
+        // Use add() sync here — the stream hasn't delivered anything to this listener yet
+        _connStateController.add(_connState);
+      },
+    );
+  }
 
   Stream<BluetoothConnectionState> get connectionState => _connStateController.stream;
   BluetoothDevice? get connectedDevice => _device;
 
   Stream<List<ScanResult>> scanForScales({Duration timeout = const Duration(seconds: 10)}) {
-    final controller = StreamController<List<ScanResult>>.broadcast();
+    late final StreamController<List<ScanResult>> controller;
+    StreamSubscription? scanResultsSub;
+    StreamSubscription? isScanningSub;
     final results = <ScanResult>[];
+
+    void cleanup() {
+      scanResultsSub?.cancel();
+      isScanningSub?.cancel();
+      if (!controller.isClosed) controller.close();
+      FlutterBluePlus.stopScan();
+    }
+
+    controller = StreamController<List<ScanResult>>.broadcast(
+      onCancel: cleanup,
+    );
 
     FlutterBluePlus.startScan(
       withServices: [Guid(AppConfig.serviceUuid)],
       timeout: timeout,
-    );
+    ).catchError((_) {
+      // Bluetooth unavailable (e.g. iOS simulator) — silently ignore
+      cleanup();
+    });
 
-    FlutterBluePlus.scanResults.listen((r) {
+    scanResultsSub = FlutterBluePlus.scanResults.listen((r) {
+      if (controller.isClosed) return;
+      final seen = results.map((e) => e.device.remoteId.str).toSet();
       results
         ..removeWhere((e) => e.device.remoteId.str.isEmpty)
-        ..addAll(r.where((s) =>
-            s.device.platformName.startsWith('ESPScale-')));
+        ..addAll(r.where((s) => seen.add(s.device.remoteId.str)));
       controller.add(results.toList());
     });
 
-    FlutterBluePlus.isScanning.listen((scanning) {
-      if (!scanning) controller.close();
+    isScanningSub = FlutterBluePlus.isScanning.skip(1).where((s) => !s).listen((_) {
+      cleanup();
     });
 
     return controller.stream;
@@ -50,8 +77,18 @@ class BleService {
   Future<void> connect(String deviceId) async {
     _device = BluetoothDevice.fromId(deviceId);
     await _device!.connect(autoConnect: false, license: License.nonprofit);
-    _connStateController.add(BluetoothConnectionState.connected);
+    _connState = BluetoothConnectionState.connected;
+    _connStateController.add(_connState);
     await _device!.discoverServices();
+
+    // Listen for unexpected disconnections
+    _device?.connectionState.listen((state) {
+      if (state == BluetoothConnectionState.disconnected) {
+        _device = null;
+        _connState = BluetoothConnectionState.disconnected;
+        _connStateController.add(_connState);
+      }
+    });
   }
 
   Future<Map<String, dynamic>> readCharacteristic(String uuid) async {
@@ -81,56 +118,144 @@ class BleService {
   }
 
   Stream<Map<String, dynamic>> notifyCharacteristic(String uuid) {
-    final controller = StreamController<Map<String, dynamic>>.broadcast();
-    final services = _device?.servicesList ?? [];
-    for (final service in services) {
-      for (final char in service.characteristics) {
-        if (char.uuid.str.toLowerCase() == uuid.toLowerCase()) {
-          char.onValueReceived.listen((value) {
-            try {
-              controller.add(jsonDecode(utf8.decode(value)) as Map<String, dynamic>);
-            } catch (_) {}
-          });
-          char.setNotifyValue(true);
+    late final StreamController<Map<String, dynamic>> controller;
+    StreamSubscription<List<int>>? valueSub;
+
+    controller = StreamController<Map<String, dynamic>>.broadcast(
+      onListen: () {
+        final services = _device?.servicesList ?? [];
+        if (_device == null) {
+          print('[BleService] notifyCharacteristic: _device is null!');
+          return;
         }
-      }
-    }
+        print('[BleService] notifyCharacteristic: searching for $uuid in ${services.length} services');
+        bool found = false;
+        for (final service in services) {
+          for (final char in service.characteristics) {
+            final charUuid = char.uuid.str.toLowerCase();
+            print('[BleService]   char: $charUuid props=${char.properties}');
+            if (charUuid == uuid.toLowerCase()) {
+              found = true;
+              print('[BleService]   FOUND! Subscribing to notifications...');
+              valueSub = char.onValueReceived.listen((value) {
+                final decoded = utf8.decode(value);
+                print('[BleService] <<< BLE notify received: $decoded');
+                if (!controller.isClosed) {
+                  try {
+                    controller.add(jsonDecode(decoded) as Map<String, dynamic>);
+                  } catch (e) {
+                    print('[BleService] JSON parse error: $e');
+                  }
+                }
+              });
+              char.setNotifyValue(true).then((_) {
+                print('[BleService] setNotifyValue(true) succeeded for $charUuid');
+              }).catchError((e) {
+                print('[BleService] setNotifyValue(true) FAILED: $e');
+              });
+            }
+          }
+        }
+        if (!found) {
+          print('[BleService] WARNING: characteristic $uuid NOT FOUND in services!');
+        }
+      },
+      onCancel: () {
+        print('[BleService] notifyCharacteristic: onCancel for $uuid');
+        valueSub?.cancel();
+        final services = _device?.servicesList ?? [];
+        for (final service in services) {
+          for (final char in service.characteristics) {
+            if (char.uuid.str.toLowerCase() == uuid.toLowerCase()) {
+              char.setNotifyValue(false).catchError((_) {});
+            }
+          }
+        }
+      },
+    );
+
     return controller.stream;
   }
 
   Future<ProvisionResult> provisionDevice({
     required String ssid,
     required String password,
+    int mode = 0,
+    String serverUrl = '',
+    String mqttHost = '',
+    int mqttPort = 1883,
   }) async {
     try {
       final deviceInfo = await readCharacteristic(AppConfig.charDeviceInfo);
       final deviceId = deviceInfo['device_id'] as String? ?? '';
 
+      // Send WiFi creds + extended config in one JSON write
       await writeCharacteristic(AppConfig.charWifiCreds, {
         'ssid': ssid,
         'password': password,
+        'mode': mode,
+        'server_url': serverUrl,
+        'mqtt_host': mqttHost,
+        'mqtt_port': mqttPort,
       });
-
-      final statusStream = notifyCharacteristic(AppConfig.charNetworkStatus);
 
       final completer = Completer<ProvisionResult>();
-      Timer? timeout = Timer(const Duration(seconds: 20), () {
-        if (!completer.isCompleted) {
-          completer.complete(const ProvisionResult(success: false, error: 'WiFi connect timeout'));
-        }
-      });
 
-      statusStream.listen((status) {
+      // Subscribe to notifications
+      StreamSubscription? notifySub;
+      notifySub = notifyCharacteristic(AppConfig.charNetworkStatus).listen((status) {
         final wifi = status['wifi'] as Map<String, dynamic>?;
         if (wifi != null && wifi['connected'] == true) {
-          timeout?.cancel();
           if (!completer.isCompleted) {
             completer.complete(ProvisionResult(success: true, deviceId: deviceId));
           }
         }
       });
 
-      return completer.future;
+      // Poll every 2s as fallback in case notification is missed
+      Timer? pollTimer;
+      pollTimer = Timer.periodic(const Duration(seconds: 2), (t) {
+        if (completer.isCompleted) {
+          t.cancel();
+          return;
+        }
+        readCharacteristic(AppConfig.charNetworkStatus).then((status) {
+          final wifi = status['wifi'] as Map<String, dynamic>?;
+          if (wifi != null && wifi['connected'] == true) {
+            if (!completer.isCompleted) {
+              completer.complete(ProvisionResult(success: true, deviceId: deviceId));
+            }
+          }
+        }).catchError((_) {}); // Ignore read errors during polling
+      });
+
+      Timer? timeout = Timer(const Duration(seconds: 30), () {
+        if (!completer.isCompleted) {
+          completer.complete(const ProvisionResult(success: false, error: 'WiFi connect timeout'));
+        }
+      });
+
+      // Cleanup on completion
+      final result = await completer.future;
+      notifySub.cancel();
+      pollTimer.cancel();
+      timeout.cancel();
+
+      // After WiFi connects, also send set_config via command channel as backup
+      if (result.success) {
+        try {
+          await sendCommand('set_config', {
+            'mode': mode,
+            'server_url': serverUrl,
+            'mqtt_host': mqttHost,
+            'mqtt_port': mqttPort,
+          }, 'prov-${DateTime.now().millisecondsSinceEpoch}');
+        } catch (_) {
+          // Command channel might not be available; WiFi creds write already sent the config
+        }
+      }
+
+      return result;
     } catch (e) {
       return ProvisionResult(success: false, error: e.toString());
     }
@@ -147,7 +272,8 @@ class BleService {
   Future<void> disconnect() async {
     await _device?.disconnect();
     _device = null;
-    _connStateController.add(BluetoothConnectionState.disconnected);
+    _connState = BluetoothConnectionState.disconnected;
+    _connStateController.add(_connState);
   }
 
   void dispose() {

@@ -15,6 +15,7 @@ void storageBegin() {
     sConfig.mqttUser = p.getString("mqtt_user", "");
     sConfig.mqttPass = p.getString("mqtt_pass", "");
     sConfig.mqttTopic = p.getString("mqtt_topic", "espscale");
+    sConfig.serverUrl = p.getString("server_url", "");
     sConfig.deviceId = p.getString("device_id", "");
     sConfig.deviceName = p.getString("device_name", "ESPScale");
     sConfig.calFactor = p.getFloat("cal_factor", 397.6f);
@@ -54,6 +55,70 @@ void storageSaveCalFactor(float factor) {
     Preferences p;
     p.begin(NVS_NAMESPACE, false);
     p.putFloat("cal_factor", factor);
+    p.end();
+}
+
+void storageSaveUnit(const String& unit) {
+    sConfig.unit = unit;
+    Preferences p;
+    p.begin(NVS_NAMESPACE, false);
+    p.putString("unit", unit);
+    p.end();
+}
+
+void storageSaveUploadInterval(uint32_t ms) {
+    sConfig.uploadIntervalMs = ms;
+    Preferences p;
+    p.begin(NVS_NAMESPACE, false);
+    p.putUInt("upload_ms", ms);
+    p.end();
+}
+
+void storageSaveConfig(const StoredConfig& cfg) {
+    sConfig = cfg;
+    Preferences p;
+    p.begin(NVS_NAMESPACE, false);
+    p.putString("wifi_ssid", cfg.wifiSsid);
+    p.putString("wifi_pass", cfg.wifiPass);
+    p.putString("mqtt_host", cfg.mqttHost);
+    p.putUShort("mqtt_port", cfg.mqttPort);
+    p.putString("mqtt_user", cfg.mqttUser);
+    p.putString("mqtt_pass", cfg.mqttPass);
+    p.putString("mqtt_topic", cfg.mqttTopic);
+    p.putString("server_url", cfg.serverUrl);
+    p.putUChar("mode", cfg.mode);
+    p.putUInt("upload_ms", cfg.uploadIntervalMs);
+    p.putString("api_key", cfg.apiKey);
+    p.end();
+}
+
+void storageSetMode(uint8_t mode) {
+    sConfig.mode = mode;
+    Preferences p;
+    p.begin(NVS_NAMESPACE, false);
+    p.putUChar("mode", mode);
+    p.end();
+}
+
+void storageSetServerUrl(const String& url) {
+    sConfig.serverUrl = url;
+    Preferences p;
+    p.begin(NVS_NAMESPACE, false);
+    p.putString("server_url", url);
+    p.end();
+}
+
+void storageSetMqttConfig(const String& host, uint16_t port, const String& user, const String& pass) {
+    sConfig.mqttHost = host;
+    sConfig.mqttPort = port;
+    sConfig.mqttUser = user;
+    sConfig.mqttPass = pass;
+    Preferences p;
+    p.begin(NVS_NAMESPACE, false);
+    p.putString("mqtt_host", host);
+    p.putUShort("mqtt_port", port);
+    p.putString("mqtt_user", user);
+    p.putString("mqtt_pass", pass);
     p.end();
 }
 

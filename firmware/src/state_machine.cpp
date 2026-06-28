@@ -3,10 +3,13 @@
 #include "storage.h"
 #include "scale_sensor.h"
 #include "wifi_manager.h"
+#include "mqtt_client.h"
 #include "utils.h"
 
 static DeviceState sState = DeviceState::PROVISIONING;
 static int sHx711FailCount = 0;
+static unsigned long sLastUploadMs = 0;
+static bool sMqttStarted = false;
 
 static const char* stateName(DeviceState s) {
     switch (s) {
@@ -37,6 +40,8 @@ void stateMachineSetState(DeviceState newState) {
 }
 
 void stateMachineTick(unsigned long nowMs) {
+    const auto& cfg = storageGet();
+
     switch (sState) {
     case DeviceState::PROVISIONING:
         if (storageHasWifi()) {
@@ -47,16 +52,33 @@ void stateMachineTick(unsigned long nowMs) {
     case DeviceState::CONNECTING_WIFI: {
         WifiState ws = wifiManagerGetState();
         if (ws == WifiState::CONNECTED) {
-            stateMachineSetState(DeviceState::RUNNING);
+            sMqttStarted = false;
+            if (cfg.mode == MODE_MQTT) {
+                stateMachineSetState(DeviceState::CONNECTING_MQTT);
+            } else {
+                stateMachineSetState(DeviceState::RUNNING);
+            }
         } else if (ws == WifiState::ERROR) {
             stateMachineSetState(DeviceState::ERROR_WIFI);
         }
         break;
     }
 
+    case DeviceState::CONNECTING_MQTT: {
+        MqttClientState ms = mqttClientGetState();
+        if (ms == MqttClientState::CONNECTED) {
+            stateMachineSetState(DeviceState::RUNNING);
+        } else if (ms == MqttClientState::ERROR) {
+            stateMachineSetState(DeviceState::ERROR_MQTT);
+        }
+        break;
+    }
+
     case DeviceState::RUNNING: {
         if (wifiManagerGetState() != WifiState::CONNECTED) {
+            sMqttStarted = false;
             stateMachineSetState(DeviceState::ERROR_WIFI);
+            break;
         }
         if (!scaleIsReady()) {
             sHx711FailCount++;
@@ -66,11 +88,34 @@ void stateMachineTick(unsigned long nowMs) {
         } else {
             sHx711FailCount = 0;
         }
+
+        // Route upload based on mode
+        if (cfg.mode == MODE_HTTP_DIRECT) {
+            // HTTP upload handled in main loop via interval timer
+        } else if (cfg.mode == MODE_MQTT) {
+            // MQTT tick handled in main loop
+        }
+        // MODE_BLE_ONLY: no upload, just BLE streaming
         break;
     }
 
     case DeviceState::ERROR_WIFI:
         if (wifiManagerGetState() == WifiState::CONNECTED) {
+            sMqttStarted = false;
+            if (cfg.mode == MODE_MQTT) {
+                stateMachineSetState(DeviceState::CONNECTING_MQTT);
+            } else {
+                stateMachineSetState(DeviceState::RUNNING);
+            }
+        }
+        break;
+
+    case DeviceState::ERROR_MQTT:
+        if (wifiManagerGetState() != WifiState::CONNECTED) {
+            stateMachineSetState(DeviceState::ERROR_WIFI);
+            break;
+        }
+        if (mqttClientGetState() == MqttClientState::CONNECTED) {
             stateMachineSetState(DeviceState::RUNNING);
         }
         break;

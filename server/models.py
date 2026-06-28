@@ -22,6 +22,7 @@ class Device(Base):
     last_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
     last_seen: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
     is_online: Mapped[bool] = mapped_column(Boolean, default=False)
+    server_url: Mapped[str] = mapped_column(String(256), default="")
     mqtt_broker: Mapped[str] = mapped_column(String(256), default="")
     wifi_ssid: Mapped[str] = mapped_column(String(64), default="")
     firmware_ver: Mapped[str] = mapped_column(String(16), default="")

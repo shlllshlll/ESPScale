@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/ble_service.dart';
-import '../services/api_service.dart';
-import '../models/device.dart';
 
 class CalibrationScreen extends ConsumerStatefulWidget {
   final String deviceId;

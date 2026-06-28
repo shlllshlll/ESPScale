@@ -3,7 +3,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from deps import verify_token
 from models import Device
 
 router = APIRouter(tags=["websocket"])
@@ -47,14 +46,7 @@ manager = ConnectionManager()
 @router.websocket("/ws")
 async def ws_all_devices(
     ws: WebSocket,
-    token: str = Query(...),
 ):
-    try:
-        verify_token(token)
-    except ValueError:
-        await ws.close(code=status.WS_1008_POLICY_VIOLATION)
-        return
-
     await ws.accept()
     try:
         while True:
@@ -75,14 +67,7 @@ async def ws_all_devices(
 async def ws_device(
     device_id: str,
     ws: WebSocket,
-    token: str = Query(...),
 ):
-    try:
-        verify_token(token)
-    except ValueError:
-        await ws.close(code=status.WS_1008_POLICY_VIOLATION)
-        return
-
     await ws.accept()
     manager.subscribe(device_id, ws)
     try:

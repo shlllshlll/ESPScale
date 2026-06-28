@@ -8,8 +8,10 @@ import '../config.dart';
 
 class WsService {
   WebSocketChannel? _channel;
-  String? _token;
   Timer? _reconnectTimer;
+  int _reconnectAttempts = 0;
+  static const int _maxReconnectAttempts = 5;
+  String? _currentDeviceId;
 
   final _weightController = StreamController<Map<String, dynamic>>.broadcast();
   final _statusController = StreamController<Map<String, dynamic>>.broadcast();
@@ -17,40 +19,48 @@ class WsService {
   Stream<Map<String, dynamic>> get weightStream => _weightController.stream;
   Stream<Map<String, dynamic>> get statusStream => _statusController.stream;
 
-  void setToken(String? token) => _token = token;
-
-  void connect(String deviceId) {
+  void connect({required String deviceId, required String wsBaseUrl}) {
+    if (_currentDeviceId == deviceId) return; // Already connected to this device
     _disconnect();
-    if (_token == null) return;
 
-    final uri = Uri.parse('${AppConfig.wsBaseUrl}/ws/$deviceId?token=$_token');
-    _channel = WebSocketChannel.connect(uri);
-    _channel!.stream.listen(
-      (data) {
-        try {
-          final msg = jsonDecode(data as String) as Map<String, dynamic>;
-          final type = msg['type'] as String?;
-          if (type == 'weight_update') {
-            _weightController.add(msg['data'] as Map<String, dynamic>);
-          } else if (type == 'device_status') {
-            _statusController.add(msg['data'] as Map<String, dynamic>);
-          }
-        } catch (_) {}
-      },
-      onError: (_) => _scheduleReconnect(deviceId),
-      onDone: () => _scheduleReconnect(deviceId),
-    );
+    _currentDeviceId = deviceId;
+
+    try {
+      final uri = Uri.parse('$wsBaseUrl/ws/$deviceId');
+      _channel = WebSocketChannel.connect(uri);
+      _channel!.stream.listen(
+        (data) {
+          try {
+            final msg = jsonDecode(data as String) as Map<String, dynamic>;
+            final type = msg['type'] as String?;
+            if (type == 'weight_update') {
+              _weightController.add(msg['data'] as Map<String, dynamic>);
+            } else if (type == 'device_status') {
+              _statusController.add(msg['data'] as Map<String, dynamic>);
+            }
+          } catch (_) {}
+        },
+        onError: (_) => _scheduleReconnect(deviceId, wsBaseUrl),
+        onDone: () => _scheduleReconnect(deviceId, wsBaseUrl),
+      );
+      _reconnectAttempts = 0;
+    } catch (_) {
+      // Server not running — silently skip
+    }
   }
 
-  void _scheduleReconnect(String deviceId) {
+  void _scheduleReconnect(String deviceId, String wsBaseUrl) {
+    if (_reconnectAttempts >= _maxReconnectAttempts) return;
+    _reconnectAttempts++;
     _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(AppConfig.wsReconnectDelay, () => connect(deviceId));
+    _reconnectTimer = Timer(AppConfig.wsReconnectDelay, () => connect(deviceId: deviceId, wsBaseUrl: wsBaseUrl));
   }
 
   void _disconnect() {
     _reconnectTimer?.cancel();
     _channel?.sink.close();
     _channel = null;
+    _currentDeviceId = null;
   }
 
   void dispose() {

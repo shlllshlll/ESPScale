@@ -106,12 +106,12 @@ flutter run              # 桌面端: flutter run -d macos
 
 ## 技术栈
 
-| 层级 | 技术 | 说明 |
-|------|------|------|
-| 设备端 | C++ (Arduino), PlatformIO, NimBLE-Arduino, HX711, PubSubClient, ArduinoJson | ESP32-C3 |
-| 服务端 | Python FastAPI, SQLAlchemy (async), aiosqlite, paho-mqtt | Docker 部署 |
-| APP 端 | Flutter, flutter_blue_plus, fl_chart, Riverpod | 跨平台 6 端 |
-| 消息 | MQTT (Mosquitto), WebSocket, HTTP REST | JSON 编码 |
+| 层级   | 技术                                                                        | 说明        |
+| ------ | --------------------------------------------------------------------------- | ----------- |
+| 设备端 | C++ (Arduino), PlatformIO, NimBLE-Arduino, HX711, PubSubClient, ArduinoJson | ESP32-C3    |
+| 服务端 | Python FastAPI, SQLAlchemy (async), aiosqlite, paho-mqtt                    | Docker 部署 |
+| APP 端 | Flutter, flutter_blue_plus, fl_chart, Riverpod                              | 跨平台 6 端 |
+| 消息   | MQTT (Mosquitto), WebSocket, HTTP REST                                      | JSON 编码   |
 
 ## 主要功能
 
@@ -130,12 +130,12 @@ flutter run              # 桌面端: flutter run -d macos
 
 ## 相关文档
 
-| 文档 | 说明 |
-|------|------|
-| [docs/firmware.md](docs/firmware.md) | 固件功能说明、BLE GATT、状态机、配网流程 |
-| [docs/environment.md](docs/environment.md) | 开发环境搭建（PlatformIO/Python/Flutter/Docker） |
-| [docs/build.md](docs/build.md) | 多端编译与发布（固件烧录/Docker 部署/Flutter 6 平台） |
-| [plans/firmware.md](plans/firmware.md) | 设备端详细实施计划 |
-| [plans/server.md](plans/server.md) | 服务端详细实施计划 |
-| [plans/app.md](plans/app.md) | APP 端详细实施计划 |
-| [CLAUDE.md](CLAUDE.md) | 技术选型与开发规范 |
+| 文档                                    | 说明                                                  |
+| --------------------------------------- | ----------------------------------------------------- |
+| [docs/firmware.md](docs/firmware.md)       | 固件功能说明、BLE GATT、状态机、配网流程              |
+| [docs/environment.md](docs/environment.md) | 开发环境搭建（PlatformIO/Python/Flutter/Docker）      |
+| [docs/build.md](docs/build.md)             | 多端编译与发布（固件烧录/Docker 部署/Flutter 6 平台） |
+| [plans/firmware.md](plans/firmware.md)     | 设备端详细实施计划                                    |
+| [plans/server.md](plans/server.md)         | 服务端详细实施计划                                    |
+| [plans/app.md](plans/app.md)               | APP 端详细实施计划                                    |
+| [CLAUDE.md](CLAUDE.md)                     | 技术选型与开发规范                                    |

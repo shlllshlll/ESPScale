@@ -2,6 +2,7 @@
 #include "config.h"
 #include "storage.h"
 #include "utils.h"
+#include "ble_protocol.h"
 #include <WiFi.h>
 
 static WifiState sWifiState = WifiState::DISCONNECTED;
@@ -40,10 +41,12 @@ void wifiManagerTick() {
             sRetryCount = 0;
             LOG_INFO("WiFi connected, IP: %s", WiFi.localIP().toString().c_str());
             storageSaveWifi(sPendingSsid, sPendingPass);
+            bleNetworkStatusNotify();
         } else if (now - sConnectStartMs > WIFI_TIMEOUT_MS) {
             sWifiState = WifiState::ERROR;
             sRetryAtMs = now + (WIFI_RECONNECT_BASE_MS * (sRetryCount + 1));
             LOG_WARN("WiFi connect timeout (%lus)", WIFI_TIMEOUT_MS / 1000);
+            bleNetworkStatusNotify();
         }
         return;
     }
