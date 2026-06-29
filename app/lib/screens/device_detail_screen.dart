@@ -10,6 +10,7 @@ import '../models/weight_record.dart';
 import '../providers/app_providers.dart';
 import '../services/api_service.dart';
 import '../services/ble_service.dart';
+import '../services/saved_measurement_store.dart';
 import '../services/ws_service.dart';
 import '../widgets/connection_indicator.dart';
 import '../widgets/weight_chart.dart';
@@ -98,20 +99,22 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
   }
 
   void _startLiveWeight({bool forceBle = false}) {
+    final isBleConnected = ref.read(bleConnectionProvider).value == BluetoothConnectionState.connected;
     final mode = _device?.mode ?? 'ble_only';
-    print('[Detail] _startLiveWeight: deviceId=${widget.deviceId} mode=$mode forceBle=$forceBle');
-    if (!forceBle && (mode == 'remote' || mode == 'http_direct' || mode == 'mqtt')) {
-      print('[Detail] _startLiveWeight: using WS (remote mode)');
-      // Try WebSocket for remote-mode devices
+    print('[Detail] _startLiveWeight: deviceId=${widget.deviceId} mode=$mode ble=$isBleConnected forceBle=$forceBle');
+
+    if (isBleConnected || forceBle) {
+      // Preferred path: real-time weight from BLE notify (lowest latency, works offline)
+      print('[Detail] _startLiveWeight: using BLE notify');
+      ref.read(weightSourceProvider.notifier).set(WeightSource.ble);
+    } else {
+      // Fallback: BLE unavailable, use WebSocket stream from server
+      print('[Detail] _startLiveWeight: BLE not connected, falling back to WS');
       final config = ref.read(serverConfigProvider);
       final wsBase = config.value?.wsBaseUrl ?? AppConfig.wsBaseUrl;
       final ws = ref.read(wsServiceProvider);
       ws.connect(deviceId: widget.deviceId, wsBaseUrl: wsBase);
       ref.read(weightSourceProvider.notifier).set(WeightSource.ws);
-    } else {
-      print('[Detail] _startLiveWeight: using BLE notify');
-      // Use BLE notify for live weight
-      ref.read(weightSourceProvider.notifier).set(WeightSource.ble);
     }
   }
 
@@ -128,12 +131,16 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
     try {
       final info = await ble.readCharacteristic(AppConfig.charDeviceInfo);
       if (mounted) {
+        final rawMode = info['mode'];
+        final modeStr = rawMode is int
+            ? (rawMode == 0 ? 'http_direct' : (rawMode == 1 ? 'mqtt' : 'ble_only'))
+            : (rawMode?.toString() ?? 'ble_only');
         setState(() {
           _device = DeviceModel(
             deviceId: (info['device_id'] as String?) ?? widget.deviceId,
             name: (info['name'] as String?) ?? widget.deviceId,
             firmwareVer: (info['firmware_version'] as String?) ?? '',
-            mode: (info['mode'] as String?) ?? 'local',
+            mode: modeStr,
             createdAt: _device?.createdAt ?? DateTime.now(),
             updatedAt: DateTime.now(),
           );
@@ -144,6 +151,14 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Auto-switch to BLE as soon as it connects (preferred real-time source)
+    ref.listen<AsyncValue<BluetoothConnectionState>>(bleConnectionProvider, (prev, next) {
+      if (next.value == BluetoothConnectionState.connected &&
+          ref.read(weightSourceProvider) != WeightSource.ble) {
+        ref.read(weightSourceProvider.notifier).set(WeightSource.ble);
+      }
+    });
+
     final weightReading = ref.watch(liveWeightProvider).value;
     final isBleConnected = ref.watch(bleConnectionProvider).value == BluetoothConnectionState.connected;
     final showChip = !_serverAvailable;
@@ -154,6 +169,11 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
       appBar: AppBar(
         title: Text(_device?.name ?? widget.deviceId),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.history),
+            tooltip: 'History',
+            onPressed: () => Navigator.of(context).pushNamed('/history', arguments: widget.deviceId),
+          ),
           if (showChip)
             Chip(
               label: Text(chipLabel, style: const TextStyle(fontSize: 12)),
@@ -165,7 +185,7 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
           const ConnectionIndicator(),
           IconButton(
             icon: const Icon(Icons.settings),
-            onPressed: () => Navigator.of(context).pushNamed('/settings', arguments: widget.deviceId),
+            onPressed: () => Navigator.of(context).pushNamed('/device-settings', arguments: widget.deviceId),
           ),
         ],
       ),
@@ -222,15 +242,43 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
                         children: [
                           _ActionButton(icon: Icons.balance, label: 'Tare', onTap: () => _sendCommand('tare')),
                           _ActionButton(icon: Icons.tune, label: 'Calibrate', onTap: () => Navigator.of(context).pushNamed('/calibrate', arguments: widget.deviceId)),
-                          _ActionButton(icon: Icons.swap_horiz, label: 'Mode', onTap: () {
-                            final newMode = _device?.mode == 'local' ? 'remote' : 'local';
-                            _sendCommand('set_mode', params: {'mode': newMode});
-                          }),
+                          _ActionButton(icon: Icons.bookmark_add, label: 'Record', onTap: () => _recordCurrent()),
                         ],
                       ),
                     ],
                   ),
                 ),
+    );
+  }
+
+  /// Save the current weight reading (from BLE/WS) as a local measurement.
+  Future<void> _recordCurrent() async {
+    final reading = ref.read(liveWeightProvider).value;
+    final w = reading?.weight ?? _device?.lastWeight;
+    if (w == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No weight reading available — connect to the device first')),
+      );
+      return;
+    }
+    final unit = reading?.unit ?? _device?.unit ?? 'g';
+    final saved = SavedMeasurement(
+      deviceId: widget.deviceId,
+      weight: w,
+      unit: unit,
+      recordedAt: DateTime.now(),
+    );
+    await SavedMeasurementStore.add(saved);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Recorded ${w.toStringAsFixed(w < 10 ? 2 : 1)} $unit'),
+        duration: const Duration(seconds: 2),
+        action: SnackBarAction(
+          label: 'View',
+          onPressed: () => Navigator.of(context).pushNamed('/history', arguments: widget.deviceId),
+        ),
+      ),
     );
   }
 }

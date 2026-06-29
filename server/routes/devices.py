@@ -15,9 +15,20 @@ async def register_device(
     body: DeviceRegister,
     db: AsyncSession = Depends(get_db),
 ):
-    existing = await db.execute(select(Device).where(Device.device_id == body.device_id))
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Device already registered")
+    result = await db.execute(select(Device).where(Device.device_id == body.device_id))
+    device = result.scalar_one_or_none()
+
+    if device is not None:
+        # Idempotent re-registration: update api_key hash so the device's
+        # current key (which it sends in X-API-Key) is accepted.
+        device.api_key_hash = hash_api_key(body.api_key)
+        if body.name:
+            device.name = body.name
+        if body.firmware_ver:
+            device.firmware_ver = body.firmware_ver
+        await db.commit()
+        await db.refresh(device)
+        return device
 
     device = Device(
         device_id=body.device_id,

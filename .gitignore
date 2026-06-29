@@ -20,3 +20,4 @@ app/devtools_options.yaml
 
 # Local SQLite database
 server/espscale.db
+.opencode

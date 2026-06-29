@@ -30,5 +30,6 @@ void storageSaveUploadInterval(uint32_t ms);
 void storageSaveConfig(const StoredConfig& cfg);
 void storageSetMode(uint8_t mode);
 void storageSetServerUrl(const String& url);
+void storageSaveApiKey(const String& key);
 void storageSetMqttConfig(const String& host, uint16_t port, const String& user, const String& pass);
 void storageFactoryReset();

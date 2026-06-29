@@ -5,6 +5,7 @@ import 'screens/calibration_screen.dart';
 import 'screens/device_detail_screen.dart';
 import 'screens/device_list_screen.dart';
 import 'screens/device_settings_screen.dart';
+import 'screens/history_screen.dart';
 import 'screens/provision_screen.dart';
 import 'screens/settings_screen.dart';
 
@@ -47,6 +48,9 @@ class ESPScaleApp extends StatelessWidget {
           case '/device-settings':
             final deviceId = settings.arguments as String;
             page = DeviceSettingsScreen(deviceId: deviceId);
+          case '/history':
+            final deviceId = settings.arguments as String;
+            page = HistoryScreen(deviceId: deviceId);
           case '/app-settings':
             page = const AppSettingsScreen();
           default:

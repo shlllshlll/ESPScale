@@ -108,6 +108,14 @@ void storageSetServerUrl(const String& url) {
     p.end();
 }
 
+void storageSaveApiKey(const String& key) {
+    sConfig.apiKey = key;
+    Preferences p;
+    p.begin(NVS_NAMESPACE, false);
+    p.putString("api_key", key);
+    p.end();
+}
+
 void storageSetMqttConfig(const String& host, uint16_t port, const String& user, const String& pass) {
     sConfig.mqttHost = host;
     sConfig.mqttPort = port;

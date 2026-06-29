@@ -42,6 +42,11 @@ class _DeviceListScreenState extends ConsumerState<DeviceListScreen>
         title: const Text('My Scales'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.dns),
+            tooltip: 'Server',
+            onPressed: () => Navigator.of(context).pushNamed('/app-settings'),
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () => ref.read(deviceListProvider.notifier).refresh(),
           ),
@@ -56,7 +61,7 @@ class _DeviceListScreenState extends ConsumerState<DeviceListScreen>
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => Center(child: Text('Error: $e')),
           data: (devices) => devices.isEmpty
-              ? const Center(child: Text('No devices registered'))
+              ? const Center(child: Text('No devices registered — use the Local (BLE) tab to pair a new scale'))
               : ListView.builder(
                   itemCount: devices.length,
                   itemBuilder: (_, i) => DeviceCard(
@@ -67,11 +72,6 @@ class _DeviceListScreenState extends ConsumerState<DeviceListScreen>
         ),
         BLEPanel(),
       ]),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.of(context).pushNamed('/provision'),
-        icon: const Icon(Icons.add),
-        label: const Text('Add Scale'),
-      ),
     );
   }
 }
