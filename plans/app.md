@@ -1,258 +1,171 @@
 # APP 端实施计划 (app/)
 
-> 状态：Phase 4 待开始
+> **状态：Phase 4 ✅ 已实现** | 版本 v0.2.0
 
 ## 目标
 
 构建跨平台（iOS/Android/macOS/Windows/Linux）称重控制 APP，支持：
 
-1. **BLE 配网**：扫描 → 连接 → 发送 WiFi 凭据
+1. **BLE 配网**：扫描 → 连接 → 发送 WiFi 凭据 → 注册到服务器
 2. **本地称重**：BLE 实时推流，大字号显示，清零/校准
 3. **远程监控**：通过服务端 API 查看历史数据和在线状态
 4. **设备管理**：编辑设置，图表分析
+5. **本地记录**：用户主动记录重要测量值，离线可用
 
 ## 技术选型
 
-最终选择 **Flutter**（经 Tauri BLE 可行性评估后决策）：
+| 项目 | 选型 | 状态 | 备注 |
+|------|------|------|------|
+| 框架 | Flutter 3.x | ✅ | Material 3, teal 主题, light/dark |
+| BLE | flutter_blue_plus (v2.3.8) | ✅ | License.nonprofit |
+| 状态管理 | Riverpod (v3.3.2) | ✅ | AsyncNotifier/StreamProvider/Notifier |
+| HTTP | dio (v5.4.0) | ✅ | Provider 动态绑定 serverConfig |
+| 图表 | fl_chart (v1.2.0) | ✅ | 曲线面积图 + 触摸提示 |
+| WebSocket | web_socket_channel (v3.0.3) | ✅ | 指数退避重连 |
+| 本地存储 | shared_preferences (v2.3.4) | ✅ | 服务器地址持久化 |
+| 路由 | Navigator named routes | ✅ | 6 个命名路由 |
+| 代码生成 | freezed + json_serializable | ❌ | 实际使用手写 fromJson/toJson |
 
-| 项目 | 选型 | 原因 |
-|------|------|------|
-| 框架 | Flutter 3.x | 单代码库覆盖 6 平台 |
-| BLE | flutter_blue_plus | 跨平台 BLE 最成熟（iOS/Android/macOS/Windows/Linux） |
-| 状态管理 | Riverpod | 类型安全，编译时检查 |
-| HTTP | dio | 拦截器/超时/重试 |
-| 图表 | fl_chart | Flutter 最流行图表库 |
-| WebSocket | web_socket_channel | 官方推荐 |
-| 代码生成 | freezed + json_serializable | 不可变模型自动生成 |
-
-## Tauri 可行性评估回顾
-
-| 平台 | BLE 能力 | 结论 |
-|------|----------|------|
-| macOS | ✅ btleplug (CoreBluetooth) | 可行但需自定义 Rust 插件 (~600行) |
-| Windows | ✅ btleplug (WinRT) | 可行 |
-| Linux | ✅ btleplug (BlueZ) | 可行 |
-| iOS | ❌ Tauri mobile 不成熟 | **不可行** |
-| Android | ❌ 同上 | **不可行** |
-
-结论：Flutter 是更合理的选择，`flutter_blue_plus` 已有成熟的多平台 BLE 支持。
-
-## 项目结构
+## 项目结构 (实际)
 
 ```
-app/
-├── pubspec.yaml
-├── lib/
-│   ├── main.dart                    # 入口, MaterialApp.router, 主题
-│   ├── app.dart                     # App widget, GoRouter 路由配置
-│   ├── config.dart                  # API base URL, 常量
-│   │
-│   ├── models/
-│   │   ├── device.dart              # @freezed Device 模型
-│   │   ├── weight_record.dart       # @freezed WeightRecord 模型
-│   │   ├── ble_characteristics.dart # BLE 特征值 UUID 映射
-│   │   └── command.dart             # 命令请求/响应模型
-│   │
-│   ├── services/
-│   │   ├── api_service.dart         # dio HTTP REST 客户端
-│   │   ├── ws_service.dart          # WebSocket 客户端 (web_socket_channel)
-│   │   ├── ble_service.dart         # BLE 扫描/连接/读写/订阅 (flutter_blue_plus)
-│   │   ├── auth_service.dart        # JWT token 存储/刷新
-│   │   └── storage_service.dart     # 本地 SharedPreferences 封装
-│   │
-│   ├── providers/
-│   │   ├── auth_provider.dart       # 用户认证状态
-│   │   ├── device_list_provider.dart # 设备列表 (从 API + BLE 扫描)
-│   │   ├── ble_connection_provider.dart # 当前 BLE 连接状态
-│   │   ├── live_weight_provider.dart # 实时重量 (来自 BLE Notify 或 WS)
-│   │   └── settings_provider.dart   # 设备设置状态
-│   │
-│   ├── screens/
-│   │   ├── login_screen.dart        # 登录/注册
-│   │   ├── device_list_screen.dart  # 设备列表 (本地 BLE + 远程列表)
-│   │   ├── provision_screen.dart    # BLE 配网向导
-│   │   ├── device_detail_screen.dart # 设备详情 (重量图表 + 实时显示)
-│   │   ├── calibration_screen.dart  # 校准向导
-│   │   ├── device_settings_screen.dart # 设备设置编辑
-│   │   └── settings_screen.dart     # APP 全局设置
-│   │
-│   ├── widgets/
-│   │   ├── weight_display.dart      # 大字号实时重量
-│   │   ├── weight_chart.dart        # 时间序列折线图 (fl_chart)
-│   │   ├── device_card.dart         # 设备列表项 (在线状态/最后重量)
-│   │   ├── connection_indicator.dart # 连接状态指示
-│   │   └── ble_scan_list.dart       # BLE 扫描结果列表
-│   │
-│   └── utils/
-│       ├── formatters.dart          # 重量/日期格式化
-│       └── validators.dart          # 表单验证
+app/lib/
+├── main.dart                       ✅ Material 3 入口 + 6 路由
+├── config.dart                     ✅ AppConfig + ServerConfig + BLE UUIDs
 │
-├── test/
-├── assets/
-│   └── icons/
-├── android/
-├── ios/
-├── macos/
-├── windows/
-└── linux/
+├── models/
+│   ├── device.dart                 ✅ DeviceModel (手写序列化)
+│   ├── weight_record.dart          ✅ WeightRecord + WeightStats
+│   └── command.dart                ⚠️ CmdRequest + CmdResponse (已定义未使用)
+│
+├── services/
+│   ├── api_service.dart            ✅ dio HTTP (8 methods)
+│   ├── ble_service.dart            ✅ BLE 扫描/连接/配网/命令 (284 行)
+│   └── ws_service.dart             ✅ WebSocket + 重连 (73 行)
+│
+├── providers/
+│   └── app_providers.dart          ✅ 6 providers + WeightReading (157 行)
+│
+├── screens/
+│   ├── device_list_screen.dart     ✅ 双 Tab (远程 + BLE) + Server 入口
+│   ├── provision_screen.dart       ✅ 4 步配网向导 (凭据记忆 + 设备预读 + API key 生成)
+│   ├── device_detail_screen.dart   ✅ 实时称重 (BLE 优先) + 图表 + Record + History
+│   ├── calibration_screen.dart     ⚠️ 校准向导 (去皮逻辑有误)
+│   ├── device_settings_screen.dart ✅ 设备设置 (HTTP server_url + MQTT broker:port)
+│   ├── settings_screen.dart        ✅ APP 设置 (Server URL)
+│   └── history_screen.dart         ✅ 本地记录历史列表 (新增)
+│
+└── widgets/
+    ├── weight_display.dart         ✅ 大字号重量 (64px) (62 行)
+    ├── weight_chart.dart           ✅ fl_chart 折线图 (70 行)
+    ├── device_card.dart            ✅ 设备卡片 + 相对时间 (70 行)
+    ├── connection_indicator.dart   ✅ BLE 连接指示 (37 行)
+    └── ble_scan_list.dart          ✅ BLE 扫描列表 (33 行)
 ```
 
-## BLE Service 设计
+## 路由配置
+
+| 路由 | 页面 | 状态 |
+|------|------|------|
+| `/devices` | DeviceListScreen | ✅ |
+| `/provision` | ProvisionScreen | ✅ |
+| `/device` | DeviceDetailScreen | ✅ |
+| `/calibrate` | CalibrationScreen | ✅ |
+| `/device-settings` | DeviceSettingsScreen | ✅ |
+| `/app-settings` | AppSettingsScreen | ✅ |
+| `/history` | HistoryScreen | ✅ (新增) |
+
+## BLE Service 实现 (已实现)
 
 ```dart
 class BleService {
-  /// 扫描附近的 ESPScale 设备 (按 Service UUID 过滤)
-  Stream<ScanResult> scanForScales({
-    Duration timeout = const Duration(seconds: 10),
-  });
-
-  /// 连接到设备
-  Future<void> connect(String deviceId);
-
-  /// 发现服务和特征值
-  Future<void> discoverServices();
-
-  /// 读取特征值 (返回解析后的 JSON Map)
+  // ✅ 已实现的核心方法:
+  Stream<ScanResult> scanForScales({Duration timeout});  // 按 Service UUID 过滤
+  Future<void> connect(BluetoothDevice device);
   Future<Map<String, dynamic>> readCharacteristic(String uuid);
-
-  /// 写入特征值 (data 自动 JSON 编码)
   Future<void> writeCharacteristic(String uuid, Map<String, dynamic> data);
-
-  /// 订阅通知 (返回 Stream, 自动 JSON 解码)
-  Stream<Map<String, dynamic>> notifyCharacteristic(String uuid);
-
-  /// 完整配网流程
-  Future<ProvisioningResult> provisionDevice({
-    required String ssid,
-    required String password,
-    String? mqttHost,
-    int? mqttPort,
-  });
-
-  /// 断开连接
+  Future<Stream<Map<String, dynamic>>> notifyCharacteristic(String uuid);
+  Future<ProvisionResult> provisionDevice({...});  // 完整配网流程
+  Future<void> sendCommand(String cmd, Map params);
   Future<void> disconnect();
 
-  /// 获取连接状态
-  Stream<BleConnectionState> get connectionState;
+  // Streams:
+  Stream<BleConnectionState> get connectionState;  // BroadcastStream
 }
 ```
 
-## BLE 配网流程
+### 配网流程 (已实现)
 
 ```
-ProvisionScreen
-  │
-  ├── 1. 扫描 BLE 设备
-  │     bleService.scanForScales()
-  │     显示 Service UUID 匹配的设备列表
-  │
-  ├── 2. 用户选择设备 → 连接
-  │     bleService.connect(deviceId)
-  │
-  ├── 3. 发现服务 → 读取 Device Info
-  │     bleService.readCharacteristic(CHAR_DEVICE_INFO_UUID)
-  │     显示: device_id, fw_version, mode
-  │
-  ├── 4. 用户输入 WiFi 凭据 (SSID + Password)
-  │     可选: MQTT broker 地址
-  │
-  ├── 5. 写入 WiFi Credentials
-  │     bleService.writeCharacteristic(CHAR_WIFI_CREDS_UUID, {
-  │       "ssid": "...",
-  │       "password": "..."
-  │     })
-  │
-  ├── 6. 监听 Network Status (NOTIFY)
-  │     bleService.notifyCharacteristic(CHAR_NETWORK_STATUS_UUID)
-  │     等待: wifi.connected=true
-  │     显示进度: WiFi 连接中 → MQTT 连接中 → 完成
-  │
-  └── 7. 配网完成 → 保存设备信息 → 跳转 DeviceDetailScreen
+provisionDevice():
+  1. 读取 Device Info → 获取 device_id, fw_version, mode
+  2. 写入 WiFi Credentials (含扩展字段: mode, server_url, mqtt)
+  3. 订阅 Network Status notifications + 每 2s 轮询作为后备
+  4. 等待 wifi.connected=true (超时 30s)
+  5. 配网成功 → 发送 set_config 命令确认
 ```
 
-## 页面功能规格
+## Riverpod Providers (已实现)
 
-### DeviceListScreen (首页)
-- 两个 tab:
-  - **本地设备**: 显示 BLE 扫描结果 + 已配对的附近设备
-  - **远程设备**: 从服务端 API 获取已注册设备列表
-- 每张 DeviceCard 显示:
-  - 设备名称/ID
-  - 在线状态指示 (绿点/灰点)
-  - 最近一次重量 + 时间
-- 点击进入 DeviceDetailScreen
+| Provider | 类型 | 说明 | 状态 |
+|----------|------|------|------|
+| `serverConfigProvider` | AsyncNotifier | SharedPreferences 持久化服务器地址 | ✅ |
+| `deviceListProvider` | AsyncNotifier | 从 API 获取设备列表 | ✅ |
+| `bleConnectionProvider` | StreamProvider | BLE 连接状态流 | ✅ |
+| `bleScanResultsProvider` | Notifier | BLE 扫描结果 | ✅ |
+| `weightSourceProvider` | Notifier | 当前数据源 (ble/ws/none) | ✅ |
+| `liveWeightProvider` | StreamProvider | 统一重量流 (BLE 或 WS) | ✅ |
+
+## 页面功能实现状态
+
+### DeviceListScreen ✅
+- 双 Tab: "远程" (API 设备列表 + 下拉刷新) + "本地 BLE" (自动扫描)
+- BLE 面板: 蓝牙状态检测 (unauthorized/off/unknown)，BT 开启时自动扫描
+- DeviceCard: 名称/ID/最后重量/在线状态/模式标签/相对时间
 - FAB: 添加设备 → ProvisionScreen
 
-### ProvisionScreen (配网向导)
-- Step 1: 扫描列表 → 选择设备
-- Step 2: 连接设备 → 显示设备信息
-- Step 3: 输入 WiFi SSID + 密码
-- Step 4: 等待配网完成 (进度动画)
-- Step 5: 成功 → 自动跳转详情页
+### ProvisionScreen ✅
+- Step 0: 读取设备信息 (device_id, fw_version, mode)
+- Step 1: 输入 WiFi SSID + 密码 + 选择模式
+  - HTTP Direct: 显示 server URL 配置
+  - MQTT: 显示 broker + port 配置
+  - BLE Only: 显示信息提示
+- Step 2: 配网进行中 (进度动画 + 状态日志)
+- Step 3: 成功 → 注册到服务器 → 跳转详情页
+- ⚠️ 注册时使用硬编码 `'placeholder-key'` 作为 API Key
 
-### DeviceDetailScreen (设备详情)
-- 顶部: 大字号实时重量 (来自 BLE Notify 或 WebSocket)
-- 中部: 时间序列折线图 (fl_chart)
-  - 时间选择器: 1h / 6h / 24h / 7d
-  - 从 API 拉取历史数据
-- 底部: 快捷操作按钮
-  - 清零 (tare)
-  - 切换单位 (g / kg / lb)
-  - 切换模式 (local ↔ remote)
-- AppBar 右侧: 设置齿轮 → DeviceSettingsScreen
+### DeviceDetailScreen ✅
+- 双数据源: 优先服务器 API，回退 BLE 直连
+- 实时重量: 根据模式选择 WebSocket 或 BLE Notify
+- 历史图表: fl_chart 折线图 (服务器有数据时)
+- 操作按钮: 清零 (tare), 校准 (跳转校准页), 模式切换
+- AppBar: 连接指示器 + ⚠️ 设置按钮 (路由名错误)
 
-### CalibrationScreen (校准向导)
-- 引导式: "请清空秤盘 → 点击下一步"
-- "放置已知重量 → 输入重量值 (如 500g) → 点击校准"
-- 发送 `calibrate` 命令
-- 显示新校准系数
+### CalibrationScreen ⚠️
+- Step 1: "清空秤盘" → 按钮文字 "Send Tare" 但实际调用 `_calibrate()` 而非 tare
+- Step 2: "放置已知重量" → 输入值 → 发送 calibrate 命令
+- ⚠️ 发送后立即显示 "校准完成" 而未等待设备确认
+- ⚠️ 无 tare 命令实际发送
 
-### DeviceSettingsScreen (设备设置)
-- 设备名称编辑
-- 上传间隔 (slider: 1s, 2s, 5s, 10s, 30s, 60s)
-- 重量单位选择 (g / kg / lb / oz)
-- MQTT broker 配置
-- 固件版本显示
-- 恢复出厂设置 (危险操作，需二次确认)
+### DeviceSettingsScreen ⚠️
+- 编辑: 名称, 单位, 上传间隔, 模式 (HTTP/MQTT/BLE), 服务器 URL
+- 保存: PUT API + 刷新设备列表
+- 🔴 `DropdownButtonFormField(initialValue:)` 编译错误，应为 `value:`
+- ⚠️ 仅通过 API 工作，无 BLE 回退
 
-## 状态管理 (Riverpod)
+### AppSettingsScreen ⚠️
+- 服务器地址: 编辑对话框 + 重置到默认值
+- 版本信息 + 默认服务器显示
+- ⚠️ "清除所有数据" 按钮 `onTap: () {}` 空实现
 
-```dart
-// 认证状态
-final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  return AuthNotifier(ref.read(authServiceProvider));
-});
-
-// 设备列表
-final deviceListProvider = AsyncNotifierProvider<DeviceListNotifier, List<Device>>(
-  DeviceListNotifier.new,
-);
-
-// BLE 连接
-final bleConnectionProvider = StreamProvider<BleConnectionState>((ref) {
-  return ref.read(bleServiceProvider).connectionState;
-});
-
-// 实时重量 (来自 BLE 或 WebSocket)
-final liveWeightProvider = StreamProvider<WeightReading>((ref) {
-  final source = ref.watch(weightSourceProvider); // 'ble' or 'ws'
-  if (source == 'ble') {
-    return ref.read(bleServiceProvider).notifyCharacteristic(CHAR_WEIGHT_STREAM_UUID)
-      .map((json) => WeightReading.fromJson(json));
-  } else {
-    return ref.read(wsServiceProvider).weightStream
-      .map((json) => WeightReading.fromJson(json));
-  }
-});
-```
-
-## 通信分层
+## 通信架构 (已实现)
 
 ```
 ┌─────────────────────────────┐
 │  UI Layer (Screens/Widgets)  │
 ├─────────────────────────────┤
 │  State Layer (Riverpod)      │
+│  6 providers                 │
 ├─────────────────────────────┤
 │  Service Layer               │
 │  ┌──────────┬──────────────┐ │
@@ -261,58 +174,14 @@ final liveWeightProvider = StreamProvider<WeightReading>((ref) {
 │  └──────────┴──────────────┘ │
 ├─────────────────────────────┤
 │  Physical Layer              │
-│  [ESP32-C3]─BLE─/─WiFi─[Server]│
+│  [ESP32-C3]─BLE─/─WiFi─[Server] │
 └─────────────────────────────┘
 ```
 
-APP 根据设备连接方式自动选择数据通道：
-- BLE 已连接 → 使用 BLE Weight Stream (本地模式)
-- 设备在线 + BLE 未连接 → 使用 WebSocket (远程模式)
-- 设备离线 → 显示最后的已知状态
-
-## 实施任务
-
-### Phase 4: APP 实现 (7-10 天)
-
-1. 项目初始化
-   - `flutter create app`
-   - 配置 Material 3 主题
-   - 添加依赖: `flutter_blue_plus`, `dio`, `riverpod`, `fl_chart`, `freezed`, `web_socket_channel`, `shared_preferences`, `go_router`
-
-2. 数据模型
-   - `models/device.dart` (freezed + json_serializable)
-   - `models/weight_record.dart`
-   - `models/ble_characteristics.dart` (UUID 映射)
-   - `models/command.dart`
-
-3. 通信服务
-   - `services/ble_service.dart`: BLE 扫描/连接/读写/订阅
-   - `services/api_service.dart`: dio HTTP 客户端 (interceptors, token refresh)
-   - `services/ws_service.dart`: WebSocket (auto-reconnect)
-   - `services/auth_service.dart`: JWT 管理 (SharedPreferences 存储)
-
-4. 状态管理
-   - Riverpod providers (auth, device list, ble, live weight, settings)
-
-5. 页面实现
-   - `screens/provision_screen.dart`: BLE 配网向导 (Stepper widget)
-   - `screens/device_list_screen.dart`: 设备列表 + BLE 扫描
-   - `screens/device_detail_screen.dart`: 实时重量 + 图表
-   - `screens/calibration_screen.dart`: 校准向导
-   - `screens/device_settings_screen.dart`: 设置表单
-   - `screens/login_screen.dart`: 登录/注册
-
-6. UI 组件
-   - `widgets/weight_display.dart`: 大字号重量数字 + 单位切换动画
-   - `widgets/weight_chart.dart`: fl_chart 时间序列
-   - `widgets/device_card.dart`: 设备卡片
-   - `widgets/ble_scan_list.dart`: BLE 扫描结果
-
-7. 测试
-   - BLE 配网流程端到端
-   - 实时重量显示
-   - 图表数据加载
-   - 设备设置修改
+APP 自动选择数据通道:
+- BLE 已连接 → 使用 BLE Weight Stream ✅
+- 设备在线 + 远程模式 → 使用 WebSocket ✅
+- 设备离线 → 显示最后已知状态 ✅
 
 ## 验证方案
 
@@ -330,3 +199,62 @@ flutter run -d android      # Android Emulator
 # 测试
 flutter test
 ```
+
+## 待修复项
+
+### 🔴 严重: 路由名不匹配
+
+**位置**: `device_detail_screen.dart` AppBar 设置按钮
+**问题**: 导航到 `'/settings'` 但注册路由为 `'/device-settings'`
+**修复**: 改为 `Navigator.pushNamed(context, '/device-settings', arguments: widget.deviceId)`
+
+### 🔴 严重: DropdownButtonFormField 编译错误
+
+**位置**: `device_settings_screen.dart`
+**问题**: `DropdownButtonFormField(initialValue: ...)` 参数不存在
+**修复**: 改为 `DropdownButtonFormField(value: ...)`
+
+### 🟡 校准页面去皮逻辑
+
+**位置**: `calibration_screen.dart` Step 1
+**问题**: "Send Tare" 按钮调用 `_calibrate()` 而非发送 `tare` 命令
+**修复**: Step 1 发送 `{"cmd": "tare"}` 命令，Step 2 发送 calibrate
+
+### 🟡 Mode 表示不一致
+
+**问题**: 多处使用不同的 mode 表示:
+- `provision_screen.dart`: 整数 0/1/2
+- `device_settings_screen.dart`: 字符串 'http_direct'/'mqtt'/'ble_only'
+- `device_detail_screen.dart`: 字符串 'local'/'remote'
+- `device_card.dart`: 检查 `device.mode == 'local'`
+**修复**: 全局统一为整数 0 (HTTP_DIRECT) / 1 (MQTT) / 2 (BLE_ONLY)，与固件 `config.h` 一致
+
+### 🟡 硬编码 API Key
+
+**位置**: `provision_screen.dart` `_finish()` 方法
+**问题**: 设备注册使用 `'placeholder-key'`
+**修复**: 从服务器注册响应中获取生成的 API Key
+
+### 🟡 清除数据未实现
+
+**位置**: `settings_screen.dart`
+**问题**: "清除所有数据" 按钮 `onTap` 为空
+**修复**: 添加 SharedPreferences.clear() + 状态重置
+
+### 🟢 未使用的模型
+
+**位置**: `models/command.dart`
+**问题**: `CmdRequest` / `CmdResponse` 已定义但从未被引用
+**修复**: 在 `BleService.sendCommand()` 中使用 `CmdRequest` 构建命令
+
+### 🟢 图表缺少时间轴
+
+**位置**: `widgets/weight_chart.dart`
+**问题**: X 轴无时间标签
+**修复**: 添加 `BottomTitles` 显示时间刻度
+
+### 🟢 调试日志清理
+
+**位置**: 多处 (`BleService`, `liveWeightProvider`, `DeviceDetailScreen`)
+**问题**: 生产代码中遗留 `print()` / `debugPrint()` 语句
+**修复**: 替换为条件编译或移除

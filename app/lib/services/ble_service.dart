@@ -177,9 +177,42 @@ class BleService {
     return controller.stream;
   }
 
+  /// Send get_status command and return the device's full config via Event notify.
+  /// Returns null if the device doesn't respond within [timeout].
+  Future<Map<String, dynamic>?> getDeviceStatus({Duration timeout = const Duration(seconds: 5)}) async {
+    final completer = Completer<Map<String, dynamic>?>();
+    StreamSubscription? sub;
+    Timer? timer;
+
+    sub = notifyCharacteristic(AppConfig.charEvent).listen((event) {
+      if (!completer.isCompleted) {
+        completer.complete(event);
+      }
+    });
+
+    timer = Timer(timeout, () {
+      if (!completer.isCompleted) {
+        completer.complete(null);
+      }
+    });
+
+    try {
+      await sendCommand('get_status', {}, 'status-${DateTime.now().millisecondsSinceEpoch}');
+    } catch (_) {
+      sub.cancel();
+      timer.cancel();
+      return null;
+    }
+
+    final result = await completer.future;
+    sub.cancel();
+    timer.cancel();
+    return result;
+  }
+
   Future<ProvisionResult> provisionDevice({
-    required String ssid,
-    required String password,
+    String ssid = '',
+    String password = '',
     int mode = 0,
     String serverUrl = '',
     String mqttHost = '',
@@ -188,16 +221,32 @@ class BleService {
     try {
       final deviceInfo = await readCharacteristic(AppConfig.charDeviceInfo);
       final deviceId = deviceInfo['device_id'] as String? ?? '';
+      final bool needsWifi = mode != 2 && ssid.isNotEmpty;
 
-      // Send WiFi creds + extended config in one JSON write
-      await writeCharacteristic(AppConfig.charWifiCreds, {
-        'ssid': ssid,
-        'password': password,
-        'mode': mode,
-        'server_url': serverUrl,
-        'mqtt_host': mqttHost,
-        'mqtt_port': mqttPort,
-      });
+      if (needsWifi) {
+        // Send WiFi creds + extended config in one JSON write
+        await writeCharacteristic(AppConfig.charWifiCreds, {
+          'ssid': ssid,
+          'password': password,
+          'mode': mode,
+          'server_url': serverUrl,
+          'mqtt_host': mqttHost,
+          'mqtt_port': mqttPort,
+        });
+      } else {
+        // BLE-only or no WiFi: send config via command channel only
+        await sendCommand('set_config', {
+          'mode': mode,
+          'server_url': serverUrl,
+          'mqtt_host': mqttHost,
+          'mqtt_port': mqttPort,
+        }, 'prov-${DateTime.now().millisecondsSinceEpoch}');
+      }
+
+      // For BLE-only mode, skip WiFi wait — config was sent via set_config
+      if (mode == 2) {
+        return ProvisionResult(success: true, deviceId: deviceId);
+      }
 
       final completer = Completer<ProvisionResult>();
 

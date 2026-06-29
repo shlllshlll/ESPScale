@@ -1,10 +1,25 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config.dart';
 import '../providers/app_providers.dart';
 import '../services/api_service.dart';
 import '../services/ble_service.dart';
+
+/// Generate a 32-character hex API key (128-bit random).
+String _generateApiKey() {
+  final rng = Random.secure();
+  return List.generate(32, (_) => rng.nextInt(16).toRadixString(16)).join();
+}
+
+/// SharedPreferences keys for WiFi credential persistence.
+const _kSavedSsid = 'provision_saved_ssid';
+const _kSavedPass = 'provision_saved_pass';
+const _kSavedMqttHost = 'provision_saved_mqtt_host';
+const _kSavedMqttPort = 'provision_saved_mqtt_port';
 
 class ProvisionScreen extends ConsumerStatefulWidget {
   const ProvisionScreen({super.key});
@@ -25,10 +40,40 @@ class _ProvisionScreenState extends ConsumerState<ProvisionScreen> {
   int _mode = 0; // 0=HTTP Direct, 1=MQTT, 2=BLE Only
   bool _loading = false;
   String? _error;
+  bool _configLoadedFromDevice = false;
+  String _apiKey = '';
 
   @override
   void initState() {
     super.initState();
+    _loadPersistedValues();
+  }
+
+  /// Load saved WiFi creds, MQTT config, and server URL from SharedPreferences.
+  Future<void> _loadPersistedValues() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // Restore WiFi creds
+    final savedSsid = prefs.getString(_kSavedSsid);
+    final savedPass = prefs.getString(_kSavedPass);
+    if (savedSsid != null && savedSsid.isNotEmpty) {
+      _ssidCtrl.text = savedSsid;
+    }
+    if (savedPass != null) {
+      _passCtrl.text = savedPass;
+    }
+
+    // Restore MQTT config
+    final savedMqttHost = prefs.getString(_kSavedMqttHost);
+    if (savedMqttHost != null && savedMqttHost.isNotEmpty) {
+      _mqttHostCtrl.text = savedMqttHost;
+    }
+    final savedMqttPort = prefs.getInt(_kSavedMqttPort);
+    if (savedMqttPort != null) {
+      _mqttPortCtrl.text = savedMqttPort.toString();
+    }
+
+    // Restore server URL
     final config = ref.read(serverConfigProvider);
     _serverUrlCtrl.text = config.value?.apiBaseUrl ?? getDefaultApiBaseUrl();
   }
@@ -43,6 +88,7 @@ class _ProvisionScreenState extends ConsumerState<ProvisionScreen> {
     super.dispose();
   }
 
+  /// Step 0→1: Read device info + full config via get_status command.
   Future<void> _readDeviceInfo() async {
     setState(() {
       _loading = true;
@@ -50,28 +96,62 @@ class _ProvisionScreenState extends ConsumerState<ProvisionScreen> {
     });
     try {
       final ble = ref.read(bleServiceProvider);
+
+      // Read basic device info (device_id, fw_version, mode)
       final info = await ble.readCharacteristic(AppConfig.charDeviceInfo);
-      setState(() {
-        _deviceId = info['device_id'] as String?;
-        _fwVersion = info['firmware_version'] as String?;
-        // Read current mode from device info — can be int (new fw) or string (old fw)
-        final devMode = info['mode'];
-        if (devMode != null) {
-          if (devMode is int) {
-            _mode = devMode;
+      _deviceId = info['device_id'] as String?;
+      _fwVersion = info['firmware_version'] as String?;
+
+      // Parse mode from device info
+      final devMode = info['mode'];
+      if (devMode != null) {
+        if (devMode is int) {
+          _mode = devMode;
+        } else {
+          final s = devMode.toString();
+          if (s == 'remote' || s == 'http_direct') {
+            _mode = 0;
+          } else if (s == 'mqtt') {
+            _mode = 1;
           } else {
-            final s = devMode.toString();
-            if (s == 'remote' || s == 'http_direct') {
-              _mode = 0;
-            } else if (s == 'mqtt') {
-              _mode = 1;
-            } else {
-              _mode = 2; // ble_only / local
-            }
+            _mode = 2;
           }
         }
-        _step = 1;
-      });
+      }
+
+      // Try to get full device config via get_status command
+      try {
+        final status = await ble.getDeviceStatus();
+        if (status != null) {
+          _configLoadedFromDevice = true;
+
+          // Pre-fill mode from device
+          final statusMode = status['mode'];
+          if (statusMode is int) {
+            _mode = statusMode;
+          }
+
+          // Pre-fill server URL from device (only if device has one)
+          final deviceServerUrl = status['server_url'] as String? ?? '';
+          if (deviceServerUrl.isNotEmpty) {
+            _serverUrlCtrl.text = deviceServerUrl;
+          }
+
+          // Pre-fill MQTT config from device
+          final deviceMqttHost = status['mqtt_host'] as String? ?? '';
+          if (deviceMqttHost.isNotEmpty) {
+            _mqttHostCtrl.text = deviceMqttHost;
+          }
+          final deviceMqttPort = status['mqtt_port'];
+          if (deviceMqttPort != null && deviceMqttPort is int && deviceMqttPort > 0) {
+            _mqttPortCtrl.text = deviceMqttPort.toString();
+          }
+        }
+      } catch (_) {
+        // get_status might fail on older firmware — that's OK, use persisted values
+      }
+
+      setState(() => _step = 1);
     } catch (e) {
       setState(() => _error = 'Failed to read device info: $e');
     } finally {
@@ -79,13 +159,32 @@ class _ProvisionScreenState extends ConsumerState<ProvisionScreen> {
     }
   }
 
+  /// Persist WiFi creds and MQTT config to SharedPreferences.
+  Future<void> _saveCredentials() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_ssidCtrl.text.trim().isNotEmpty) {
+      await prefs.setString(_kSavedSsid, _ssidCtrl.text.trim());
+      await prefs.setString(_kSavedPass, _passCtrl.text.trim());
+    }
+    if (_mqttHostCtrl.text.trim().isNotEmpty) {
+      await prefs.setString(_kSavedMqttHost, _mqttHostCtrl.text.trim());
+      await prefs.setInt(_kSavedMqttPort, int.tryParse(_mqttPortCtrl.text.trim()) ?? 1883);
+    }
+  }
+
+  /// Step 1→2: Send provisioning data to device.
   Future<void> _provision() async {
     final ssid = _ssidCtrl.text.trim();
     final pass = _passCtrl.text.trim();
-    if (ssid.isEmpty) {
-      setState(() => _error = 'SSID is required');
+
+    // WiFi is required for HTTP and MQTT modes, not for BLE-only
+    if (_mode != 2 && ssid.isEmpty) {
+      setState(() => _error = 'WiFi SSID is required for HTTP and MQTT modes');
       return;
     }
+
+    // Generate API key for device authentication with server
+    _apiKey = _generateApiKey();
 
     setState(() {
       _loading = true;
@@ -105,6 +204,19 @@ class _ProvisionScreenState extends ConsumerState<ProvisionScreen> {
 
     if (mounted) {
       if (result.success) {
+        // Save credentials for next time
+        await _saveCredentials();
+
+        // Send the API key to firmware via set_config so it can authenticate with server
+        try {
+          await ble.sendCommand('set_config', {
+            'api_key': _apiKey,
+          }, 'apikey-${DateTime.now().millisecondsSinceEpoch}');
+        } catch (_) {
+          // Non-fatal — firmware will have empty API key, HTTP auth will fail
+          // but the device is still usable via BLE
+        }
+
         setState(() => _step = 3);
       } else {
         setState(() {
@@ -116,12 +228,13 @@ class _ProvisionScreenState extends ConsumerState<ProvisionScreen> {
     setState(() => _loading = false);
   }
 
+  /// Step 3→finish: Register device on server and navigate to detail page.
   Future<void> _finish() async {
     final api = ref.read(apiServiceProvider);
     String? regError;
     try {
-      if (_deviceId != null) {
-        await api.registerDevice(deviceId: _deviceId!, apiKey: 'placeholder-key', firmwareVer: _fwVersion ?? '');
+      if (_deviceId != null && _apiKey.isNotEmpty) {
+        await api.registerDevice(deviceId: _deviceId!, apiKey: _apiKey, firmwareVer: _fwVersion ?? '');
       }
     } catch (e) {
       regError = e.toString();
@@ -136,7 +249,12 @@ class _ProvisionScreenState extends ConsumerState<ProvisionScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Register failed: $regError')));
     }
     if (_deviceId != null) {
-      Navigator.of(context).pushNamedAndRemoveUntil('/device', (_) => false, arguments: _deviceId);
+      // Pop the provision screen off the stack, then push detail so back returns to device list
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        '/devices',
+        (route) => false,
+      );
+      Navigator.of(context).pushNamed('/device', arguments: _deviceId);
     } else {
       Navigator.of(context).pushNamedAndRemoveUntil('/devices', (_) => false);
     }
@@ -146,14 +264,17 @@ class _ProvisionScreenState extends ConsumerState<ProvisionScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Provision Scale')),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: _loading
-            ? const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text('Working...'),
-              ]))
+            ? const Padding(
+                padding: EdgeInsets.only(top: 80),
+                child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Working...'),
+                ])),
+              )
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -176,30 +297,25 @@ class _ProvisionScreenState extends ConsumerState<ProvisionScreen> {
                     ),
                   ],
                   if (_step >= 1) ...[
+                    // --- Device info card ---
                     if (_deviceId != null)
                       Card(
                         child: Padding(
                           padding: const EdgeInsets.all(16),
                           child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text('Device: $_deviceId', style: Theme.of(context).textTheme.titleMedium),
                               if (_fwVersion != null) Text('Firmware: $_fwVersion'),
+                              if (_configLoadedFromDevice)
+                                Text('Config loaded from device',
+                                    style: TextStyle(color: Colors.green.shade700, fontSize: 12)),
                             ],
                           ),
                         ),
                       ),
                     const SizedBox(height: 16),
-                    TextField(
-                      controller: _ssidCtrl,
-                      decoration: const InputDecoration(labelText: 'WiFi SSID', prefixIcon: Icon(Icons.wifi)),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _passCtrl,
-                      decoration: const InputDecoration(labelText: 'WiFi Password', prefixIcon: Icon(Icons.lock)),
-                      obscureText: true,
-                    ),
-                    const SizedBox(height: 16),
+
                     // --- Mode selector ---
                     Text('Report Mode', style: Theme.of(context).textTheme.titleSmall),
                     const SizedBox(height: 8),
@@ -212,8 +328,26 @@ class _ProvisionScreenState extends ConsumerState<ProvisionScreen> {
                       selected: {_mode},
                       onSelectionChanged: (sel) => setState(() => _mode = sel.first),
                     ),
-                    const SizedBox(height: 12),
-                    // --- Conditional config fields ---
+                    const SizedBox(height: 16),
+
+                    // --- WiFi credentials (only for HTTP and MQTT modes) ---
+                    if (_mode != 2) ...[
+                      Text('WiFi Configuration', style: Theme.of(context).textTheme.titleSmall),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _ssidCtrl,
+                        decoration: const InputDecoration(labelText: 'WiFi SSID', prefixIcon: Icon(Icons.wifi)),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _passCtrl,
+                        decoration: const InputDecoration(labelText: 'WiFi Password', prefixIcon: Icon(Icons.lock)),
+                        obscureText: true,
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // --- Mode-specific config ---
                     if (_mode == 0) ...[
                       TextField(
                         controller: _serverUrlCtrl,
@@ -258,21 +392,26 @@ class _ProvisionScreenState extends ConsumerState<ProvisionScreen> {
                           color: Colors.blue.shade50,
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Text('BLE-only mode: no server needed. Weight data streams directly to this app via Bluetooth.'),
+                        child: const Text(
+                            'BLE-only mode: no WiFi or server needed. Weight data streams directly to this app via Bluetooth.'),
                       ),
                     ],
                     const SizedBox(height: 24),
                     ElevatedButton.icon(
                       onPressed: _provision,
                       icon: const Icon(Icons.play_arrow),
-                      label: const Text('Provision'),
+                      label: Text(_mode == 2 ? 'Configure & Connect' : 'Provision'),
                       style: ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
                     ),
                   ],
                   if (_step == 3) ...[
                     const Icon(Icons.check_circle, size: 80, color: Colors.green),
                     const SizedBox(height: 16),
-                    const Text('Provisioning successful!', textAlign: TextAlign.center, style: TextStyle(fontSize: 18)),
+                    Text(
+                      _mode == 2 ? 'Configuration applied!' : 'Provisioning successful!',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 18),
+                    ),
                     const SizedBox(height: 24),
                     ElevatedButton.icon(
                       onPressed: _finish,

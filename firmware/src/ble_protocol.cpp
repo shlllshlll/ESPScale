@@ -189,6 +189,9 @@ void bleOnCommandWrite(NimBLECharacteristic* pChar) {
         if (params.containsKey("upload_interval_ms")) {
             storageSaveUploadInterval(params["upload_interval_ms"].as<uint32_t>());
         }
+        if (params.containsKey("api_key")) {
+            storageSaveApiKey(params["api_key"].as<const char*>());
+        }
 
         LOG_INFO("Config updated via BLE");
         String ack = protocolBuildAck("set_config", true, req.requestId);
