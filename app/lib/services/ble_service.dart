@@ -50,11 +50,21 @@ class BleService {
       onCancel: cleanup,
     );
 
+    // On Android 12+, the OS shows the BLUETOOTH_SCAN/CONNECT prompt the first
+    // time we call startScan (the manifest declarations are what make the
+    // prompt appear). On Android 11 and below, startScan will fail with a
+    // "missing location permission" error and adapterState transitions to
+    // unauthorized — which the UI already surfaces as a "permission denied"
+    // message. We don't pre-request ACCESS_FINE_LOCATION here to avoid
+    // pulling in permission_handler just for the legacy path; users on
+    // Android <12 can grant location in system settings if the scan fails.
     FlutterBluePlus.startScan(
       withServices: [Guid(AppConfig.serviceUuid)],
       timeout: timeout,
     ).catchError((_) {
-      // Bluetooth unavailable (e.g. iOS simulator) — silently ignore
+      // Bluetooth unavailable (e.g. iOS simulator) or denied permission —
+      // silently ignore; the adapter state listener in BLEPanel will tell
+      // the user what's wrong.
       cleanup();
     });
 

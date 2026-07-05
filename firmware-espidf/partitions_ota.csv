@@ -1,0 +1,27 @@
+# Name,   Type, SubType, Offset, Size,    Flags
+# ============================================================================
+# ESPScale OTA Partition Table (4MB Flash)
+#
+# Let gen_esp32part.py auto-calculate offsets for proper alignment.
+# App partitions are auto-aligned to 64KB boundaries.
+#
+# Estimated layout (tools/partition_table/gen_esp32part.py auto-calc):
+#   0x008000 : Partition table (4KB)
+#   0x009000 - nvs        (24KB)
+#   0x00f000 - otadata    (8KB)
+#   0x011000 - phy_init   (4KB)
+#   0x020000 - factory    (1280KB)
+#   0x162000 - ota_0      (1280KB)
+#   0x2a4000 - ota_1      (1280KB)
+#   0x3e6000 - coredump   (64KB)
+#   0x3f6000 - nvs_keys   (4KB)
+#   End:      ~0x400000   (Free: ~36KB)
+# ============================================================================
+nvs,      data, nvs,      0x9000,  0x6000,
+otadata,  data, ota,      0xf000,  0x2000,
+phy_init, data, phy,      0x11000, 0x1000,
+factory,  app,  factory,  ,        0x140000,
+ota_0,    app,  ota_0,    ,        0x140000,
+ota_1,    app,  ota_1,    ,        0x140000,
+coredump, data, coredump, ,        0x10000,
+nvs_keys, data, nvs_keys, ,        0x1000,

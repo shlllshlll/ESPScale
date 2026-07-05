@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "esp_scale_app" "\0"
+            VALUE "FileDescription", "ESPScale" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "esp_scale_app" "\0"
+            VALUE "InternalName", "ESPScale" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "esp_scale_app.exe" "\0"
-            VALUE "ProductName", "esp_scale_app" "\0"
+            VALUE "OriginalFilename", "ESPScale.exe" "\0"
+            VALUE "ProductName", "ESPScale" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

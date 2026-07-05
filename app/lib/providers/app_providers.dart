@@ -108,7 +108,7 @@ class WeightSourceNotifier extends Notifier<WeightSource> {
   void set(WeightSource source) => state = source;
 }
 
-final liveWeightProvider = StreamProvider<WeightReading>((ref) {
+final liveWeightProvider = StreamProvider.autoDispose<WeightReading>((ref) {
   final source = ref.watch(weightSourceProvider);
   print('[liveWeightProvider] source=$source building stream...');
   if (source == WeightSource.ble) {

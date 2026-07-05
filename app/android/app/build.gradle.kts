@@ -8,6 +8,7 @@ android {
     namespace = "com.example.esp_scale_app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
+    ndkVersion = "30.0.14904198"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
