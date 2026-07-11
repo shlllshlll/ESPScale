@@ -654,7 +654,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Manual;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = "ESPScale";
 			};
 			name = Debug;
 		};
@@ -662,7 +662,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = "ESPScale";
 			};
 			name = Release;
 		};
