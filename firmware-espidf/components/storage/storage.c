@@ -48,6 +48,9 @@ esp_err_t storage_load_config(stored_config_t *cfg) {
         strncpy(cfg->unit, DEFAULT_UNIT, sizeof(cfg->unit) - 1);
         cfg->upload_interval_ms = DEFAULT_UPLOAD_INTERVAL_MS;
         cfg->mqtt_port = DEFAULT_MQTT_PORT;
+        cfg->mode = DEFAULT_MODE;
+        strncpy(cfg->mqtt_user, DEFAULT_MQTT_USER, sizeof(cfg->mqtt_user) - 1);
+        strncpy(cfg->mqtt_pass, DEFAULT_MQTT_PASS, sizeof(cfg->mqtt_pass) - 1);
         return ESP_OK;
     }
 
@@ -72,10 +75,14 @@ esp_err_t storage_load_config(stored_config_t *cfg) {
     }
 
     len = sizeof(cfg->mqtt_user);
-    nvs_get_str(handle, "mqtt_user", cfg->mqtt_user, &len);
+    if (nvs_get_str(handle, "mqtt_user", cfg->mqtt_user, &len) != ESP_OK || strlen(cfg->mqtt_user) == 0) {
+        strncpy(cfg->mqtt_user, DEFAULT_MQTT_USER, sizeof(cfg->mqtt_user) - 1);
+    }
 
     len = sizeof(cfg->mqtt_pass);
-    nvs_get_str(handle, "mqtt_pass", cfg->mqtt_pass, &len);
+    if (nvs_get_str(handle, "mqtt_pass", cfg->mqtt_pass, &len) != ESP_OK || strlen(cfg->mqtt_pass) == 0) {
+        strncpy(cfg->mqtt_pass, DEFAULT_MQTT_PASS, sizeof(cfg->mqtt_pass) - 1);
+    }
 
     len = sizeof(cfg->server_url);
     nvs_get_str(handle, "server_url", cfg->server_url, &len);
@@ -106,11 +113,11 @@ esp_err_t storage_load_config(stored_config_t *cfg) {
         cfg->upload_interval_ms = DEFAULT_UPLOAD_INTERVAL_MS;
     }
 
-    uint8_t mode = MODE_HTTP_DIRECT;
+    uint8_t mode = DEFAULT_MODE;
     if (nvs_get_u8(handle, "mode", &mode) == ESP_OK) {
         cfg->mode = mode;
     } else {
-        cfg->mode = MODE_HTTP_DIRECT;
+        cfg->mode = DEFAULT_MODE;
     }
 
     len = sizeof(cfg->api_key);
@@ -126,7 +133,7 @@ esp_err_t storage_load_config(stored_config_t *cfg) {
     strncpy(cfg->device_id, s_device_id, sizeof(cfg->device_id) - 1);
 
     nvs_close(handle);
-    ESP_LOGI(TAG, "Config loaded: mode=%d, unit=%s, cal=%.2f",
+    ESP_LOGD(TAG, "Config loaded: mode=%d, unit=%s, cal=%.2f",
              cfg->mode, cfg->unit, cfg->cal_factor);
     return ESP_OK;
 }

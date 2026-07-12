@@ -87,16 +87,36 @@ esp_err_t wifi_manager_connect(const char *ssid, const char *pass) {
         strncpy((char *)wifi_cfg.sta.password, pass, sizeof(wifi_cfg.sta.password) - 1);
     }
 
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_cfg));
-    ESP_ERROR_CHECK(esp_wifi_start());
+    esp_err_t ret = esp_wifi_set_mode(WIFI_MODE_STA);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "esp_wifi_set_mode failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    ret = esp_wifi_set_config(WIFI_IF_STA, &wifi_cfg);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "esp_wifi_set_config failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    // Idempotent: already-started WiFi returns ESP_ERR_INVALID_STATE.
+    // The new network_task may reconnect after timeout; aborting here
+    // reboot-loops the device and kills BLE advertising.
+    ret = esp_wifi_start();
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "esp_wifi_start failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
 
     s_retry_count = 0;
-    esp_err_t ret = esp_wifi_connect();
+    ret = esp_wifi_connect();
     if (ret == ESP_OK) {
         ESP_LOGI(TAG, "Connecting to SSID: %s", ssid);
+    } else if (ret != ESP_ERR_WIFI_CONN) {
+        // ESP_ERR_WIFI_CONN = already connecting/connected — not fatal
+        ESP_LOGW(TAG, "esp_wifi_connect: %s", esp_err_to_name(ret));
     }
-    return ret;
+    return ESP_OK;
 }
 
 esp_err_t wifi_manager_disconnect(void) {

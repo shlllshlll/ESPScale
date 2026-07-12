@@ -93,6 +93,7 @@ class _BLEPanelState extends ConsumerState<BLEPanel> {
     super.initState();
     _adapterState = FlutterBluePlus.adapterStateNow;
     _adapterSub = FlutterBluePlus.adapterState.listen((state) {
+      if (!mounted) return;
       setState(() => _adapterState = state);
       if (state == BluetoothAdapterState.on) _startScan();
     });

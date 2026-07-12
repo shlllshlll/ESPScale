@@ -112,15 +112,22 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
       print('[Detail] _startLiveWeight: BLE not connected, falling back to WS');
       final config = ref.read(serverConfigProvider);
       final wsBase = config.value?.wsBaseUrl ?? AppConfig.wsBaseUrl;
+      final apiKey = config.value?.appApiKey ?? '';
       final ws = ref.read(wsServiceProvider);
-      ws.connect(deviceId: widget.deviceId, wsBaseUrl: wsBase);
+      ws.connect(deviceId: widget.deviceId, wsBaseUrl: wsBase, apiKey: apiKey);
       ref.read(weightSourceProvider.notifier).set(WeightSource.ws);
     }
   }
 
   @override
   void dispose() {
-    ref.read(weightSourceProvider.notifier).set(WeightSource.none);
+    // Avoid ref.read after element is defunct — schedule source reset
+    // only if the provider container is still alive.
+    try {
+      if (mounted) {
+        ref.read(weightSourceProvider.notifier).set(WeightSource.none);
+      }
+    } catch (_) {}
     super.dispose();
   }
 

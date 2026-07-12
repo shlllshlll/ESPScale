@@ -1,11 +1,18 @@
-from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from config import APP_API_KEY
 from database import get_db
 from models import Device
 
 router = APIRouter(tags=["websocket"])
+
+
+def _verify_ws_auth(api_key: str | None) -> bool:
+    if not APP_API_KEY:
+        return True
+    return api_key == APP_API_KEY
 
 
 class ConnectionManager:
@@ -46,7 +53,11 @@ manager = ConnectionManager()
 @router.websocket("/ws")
 async def ws_all_devices(
     ws: WebSocket,
+    api_key: str | None = Query(default=None),
 ):
+    if not _verify_ws_auth(api_key):
+        await ws.close(code=4001, reason="Invalid API key")
+        return
     await ws.accept()
     try:
         while True:
@@ -67,7 +78,11 @@ async def ws_all_devices(
 async def ws_device(
     device_id: str,
     ws: WebSocket,
+    api_key: str | None = Query(default=None),
 ):
+    if not _verify_ws_auth(api_key):
+        await ws.close(code=4001, reason="Invalid API key")
+        return
     await ws.accept()
     manager.subscribe(device_id, ws)
     try:

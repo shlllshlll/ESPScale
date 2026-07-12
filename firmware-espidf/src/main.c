@@ -113,16 +113,108 @@ static void scale_task(void *pvParameters) {
     TickType_t last_wake = xTaskGetTickCount();
 
     while (1) {
-        // Process commands
         cmd_request_t cmd;
         while (xQueueReceive(g_cmd_queue, &cmd, 0) == pdTRUE) {
-            if (cmd.type == CMD_TARE) {
+            switch (cmd.type) {
+            case CMD_TARE:
                 scale_sensor_tare(20);
                 ESP_LOGI(TAG, "Tare done");
-            } else if (cmd.type == CMD_CALIBRATE) {
-                // TODO: Extract expected_weight from params
-                float new_factor = scale_sensor_calibrate(500.0f);
+                break;
+            case CMD_CALIBRATE: {
+                double expected = 500.0;
+                protocol_json_get_number(cmd.raw_json, "expected_weight", &expected);
+                float new_factor = scale_sensor_calibrate((float)expected);
+                storage_save_cal_factor(new_factor);
                 ESP_LOGI(TAG, "Calibrated: factor=%.2f", new_factor);
+                break;
+            }
+            case CMD_SET_MODE: {
+                double mode;
+                if (protocol_json_get_number(cmd.raw_json, "mode", &mode)) {
+                    storage_save_mode((uint8_t)mode);
+                    ESP_LOGI(TAG, "Mode set to %d", (uint8_t)mode);
+                }
+                break;
+            }
+            case CMD_SET_CONFIG: {
+                double mode, interval, mqtt_port;
+                char server_url[128] = {0};
+                char mqtt_host[64] = {0};
+                char mqtt_user[32] = {0};
+                char mqtt_pass[64] = {0};
+                char unit[4] = {0};
+                char api_key[64] = {0};
+
+                if (protocol_json_get_number(cmd.raw_json, "mode", &mode)) {
+                    storage_save_mode((uint8_t)mode);
+                }
+                if (protocol_json_get_string(cmd.raw_json, "server_url", server_url, sizeof(server_url))) {
+                    storage_save_server_url(server_url);
+                }
+                if (protocol_json_get_string(cmd.raw_json, "mqtt_host", mqtt_host, sizeof(mqtt_host))) {
+                    mqtt_config_t mqtt_cfg = {0};
+                    strncpy(mqtt_cfg.host, mqtt_host, sizeof(mqtt_cfg.host) - 1);
+                    mqtt_cfg.port = protocol_json_get_number(cmd.raw_json, "mqtt_port", &mqtt_port) ? (uint16_t)mqtt_port : DEFAULT_MQTT_PORT;
+                    protocol_json_get_string(cmd.raw_json, "mqtt_user", mqtt_user, sizeof(mqtt_user));
+                    protocol_json_get_string(cmd.raw_json, "mqtt_pass", mqtt_pass, sizeof(mqtt_pass));
+                    strncpy(mqtt_cfg.user, mqtt_user, sizeof(mqtt_cfg.user) - 1);
+                    strncpy(mqtt_cfg.pass, mqtt_pass, sizeof(mqtt_cfg.pass) - 1);
+                    storage_save_mqtt_config(&mqtt_cfg);
+                }
+                if (protocol_json_get_string(cmd.raw_json, "unit", unit, sizeof(unit))) {
+                    storage_save_unit(unit);
+                }
+                if (protocol_json_get_number(cmd.raw_json, "upload_interval_ms", &interval)) {
+                    storage_save_upload_interval((uint32_t)interval);
+                }
+                if (protocol_json_get_string(cmd.raw_json, "api_key", api_key, sizeof(api_key))) {
+                    storage_save_api_key(api_key);
+                }
+                ESP_LOGI(TAG, "Config updated via BLE command");
+                break;
+            }
+            case CMD_SET_WIFI: {
+                char ssid[33] = {0};
+                char pass[65] = {0};
+                if (protocol_json_get_string(cmd.raw_json, "ssid", ssid, sizeof(ssid)) && strlen(ssid) > 0) {
+                    protocol_json_get_string(cmd.raw_json, "password", pass, sizeof(pass));
+                    storage_save_wifi(ssid, pass);
+                    wifi_manager_connect(ssid, pass);
+                    ESP_LOGI(TAG, "WiFi updated: %s", ssid);
+                }
+                break;
+            }
+            case CMD_SET_MQTT: {
+                char mqtt_host[64] = {0};
+                char mqtt_user[32] = {0};
+                char mqtt_pass[64] = {0};
+                double mqtt_port = DEFAULT_MQTT_PORT;
+                protocol_json_get_string(cmd.raw_json, "mqtt_host", mqtt_host, sizeof(mqtt_host));
+                protocol_json_get_number(cmd.raw_json, "mqtt_port", &mqtt_port);
+                protocol_json_get_string(cmd.raw_json, "mqtt_user", mqtt_user, sizeof(mqtt_user));
+                protocol_json_get_string(cmd.raw_json, "mqtt_pass", mqtt_pass, sizeof(mqtt_pass));
+                mqtt_config_t mqtt_cfg = {0};
+                strncpy(mqtt_cfg.host, strlen(mqtt_host) > 0 ? mqtt_host : "localhost", sizeof(mqtt_cfg.host) - 1);
+                mqtt_cfg.port = (uint16_t)mqtt_port;
+                strncpy(mqtt_cfg.user, mqtt_user, sizeof(mqtt_cfg.user) - 1);
+                strncpy(mqtt_cfg.pass, mqtt_pass, sizeof(mqtt_cfg.pass) - 1);
+                storage_save_mqtt_config(&mqtt_cfg);
+                ESP_LOGI(TAG, "MQTT config saved: %s:%d", mqtt_cfg.host, mqtt_cfg.port);
+                break;
+            }
+            case CMD_REBOOT:
+                ESP_LOGI(TAG, "Rebooting...");
+                vTaskDelay(pdMS_TO_TICKS(200));
+                esp_restart();
+                break;
+            case CMD_FACTORY_RESET:
+                ESP_LOGI(TAG, "Factory reset...");
+                vTaskDelay(pdMS_TO_TICKS(200));
+                storage_factory_reset();
+                esp_restart();
+                break;
+            default:
+                break;
             }
         }
 
@@ -186,62 +278,115 @@ static void ble_task(void *pvParameters) {
 static void network_task(void *pvParameters) {
     ESP_LOGI(TAG, "Network task started");
 
-    // Wait for WiFi
     wifi_manager_init();
 
-    stored_config_t cfg;
-    xSemaphoreTake(g_config_mutex, portMAX_DELAY);
-    storage_load_config(&cfg);
-    xSemaphoreGive(g_config_mutex);
-
-    // Connect WiFi if credentials exist
-    if (strlen(cfg.wifi_ssid) > 0) {
-        s_device_state = STATE_CONNECTING_WIFI;
-        wifi_manager_connect(cfg.wifi_ssid, cfg.wifi_pass);
-    }
-
-    // Wait for WiFi connection
-    EventBits_t bits = xEventGroupWaitBits(g_sys_events,
-                                            WIFI_CONNECTED_BIT,
-                                            pdFALSE, pdTRUE,
-                                            pdMS_TO_TICKS(WIFI_CONNECT_TIMEOUT_MS));
-
-    if (bits & WIFI_CONNECTED_BIT) {
-        ESP_LOGI(TAG, "WiFi connected");
-        s_device_state = STATE_RUNNING;
-
-        // Init MQTT if mode is MQTT
-        if (cfg.mode == MODE_MQTT) {
-            s_device_state = STATE_CONNECTING_MQTT;
-            mqtt_handler_init();
-        }
-    } else {
-        ESP_LOGW(TAG, "WiFi connection timeout");
-        s_device_state = STATE_ERROR_WIFI;
-    }
-
+    stored_config_t cfg = {0};
+    bool wifi_attempted = false;
+    bool mqtt_started = false;
     weight_data_t data;
     TickType_t last_post = 0;
+    TickType_t last_cfg_load = 0;
+    TickType_t last_mode_log = 0;
 
     while (1) {
-        // Wait for weight data
-        if (xQueueReceive(g_weight_queue, &data, pdMS_TO_TICKS(1000)) == pdTRUE) {
-            TickType_t now = xTaskGetTickCount();
-            TickType_t interval = pdMS_TO_TICKS(cfg.upload_interval_ms);
+        TickType_t now = xTaskGetTickCount();
 
-            if ((now - last_post) >= interval) {
-                if (wifi_manager_is_connected()) {
-                    if (cfg.mode == MODE_HTTP_DIRECT) {
-                        http_client_post_weight(&data);
-                    } else if (cfg.mode == MODE_MQTT && mqtt_handler_is_connected()) {
-                        mqtt_handler_publish_weight(&data);
-                    }
+        // Reload NVS config periodically (not every loop — avoids spam + NVS wear)
+        if ((now - last_cfg_load) >= pdMS_TO_TICKS(1000)) {
+            xSemaphoreTake(g_config_mutex, portMAX_DELAY);
+            storage_load_config(&cfg);
+            xSemaphoreGive(g_config_mutex);
+            last_cfg_load = now;
+        }
+
+        if ((now - last_mode_log) >= pdMS_TO_TICKS(10000)) {
+            ESP_LOGI(TAG, "upload mode=%d wifi=%d mqtt=%d ssid=%s interval=%lums",
+                     cfg.mode,
+                     wifi_manager_is_connected(),
+                     mqtt_handler_is_connected(),
+                     cfg.wifi_ssid,
+                     (unsigned long)(cfg.upload_interval_ms ? cfg.upload_interval_ms
+                                                            : DEFAULT_UPLOAD_INTERVAL_MS));
+            last_mode_log = now;
+        }
+
+        if (cfg.mode == MODE_BLE_ONLY) {
+            s_device_state = STATE_RUNNING;
+            if (mqtt_started) {
+                mqtt_handler_stop();
+                mqtt_handler_reset();
+                mqtt_started = false;
+            }
+            vTaskDelay(pdMS_TO_TICKS(500));
+            continue;
+        }
+
+        // Connect WiFi once when credentials appear (BLE provision or NVS).
+        if (!wifi_manager_is_connected() && strlen(cfg.wifi_ssid) > 0 && !wifi_attempted) {
+            s_device_state = STATE_CONNECTING_WIFI;
+            wifi_manager_connect(cfg.wifi_ssid, cfg.wifi_pass);
+            wifi_attempted = true;
+
+            EventBits_t bits = xEventGroupWaitBits(g_sys_events,
+                                                    WIFI_CONNECTED_BIT,
+                                                    pdFALSE, pdTRUE,
+                                                    pdMS_TO_TICKS(WIFI_CONNECT_TIMEOUT_MS));
+            if (bits & WIFI_CONNECTED_BIT) {
+                ESP_LOGI(TAG, "WiFi connected");
+                s_device_state = STATE_RUNNING;
+            } else {
+                ESP_LOGW(TAG, "WiFi connection timeout");
+                s_device_state = STATE_ERROR_WIFI;
+                wifi_attempted = false;
+                vTaskDelay(pdMS_TO_TICKS(5000));
+                continue;
+            }
+        }
+
+        // WiFi may also be started by BLE wifi_creds callback — detect that.
+        if (wifi_manager_is_connected()) {
+            wifi_attempted = true;
+            if (cfg.mode == MODE_MQTT && !mqtt_started) {
+                s_device_state = STATE_CONNECTING_MQTT;
+                ESP_LOGI(TAG, "Starting MQTT client...");
+                if (mqtt_handler_start() != ESP_OK) {
+                    ESP_LOGE(TAG, "MQTT start failed");
+                    mqtt_started = false;
+                } else {
+                    mqtt_started = true;
+                }
+            }
+            if (cfg.mode == MODE_HTTP_DIRECT) {
+                s_device_state = STATE_RUNNING;
+            }
+        }
+
+        // Timer-based upload: peek latest sample (do NOT consume — BLE also peeks).
+        // Old path used xQueueReceive which raced with BLE and could starve upload.
+        uint32_t interval_ms = cfg.upload_interval_ms > 0
+                                   ? cfg.upload_interval_ms
+                                   : DEFAULT_UPLOAD_INTERVAL_MS;
+        if ((now - last_post) >= pdMS_TO_TICKS(interval_ms)) {
+            if (xQueuePeek(g_weight_queue, &data, 0) == pdTRUE) {
+                if (!wifi_manager_is_connected()) {
+                    ESP_LOGW(TAG, "Skip upload: WiFi not connected (mode=%d)", cfg.mode);
+                } else if (cfg.mode == MODE_HTTP_DIRECT) {
+                    ESP_LOGI(TAG, "Upload via HTTP weight=%.1f", data.weight);
+                    http_client_post_weight(&data);
                     last_post = now;
+                } else if (cfg.mode == MODE_MQTT) {
+                    if (mqtt_handler_is_connected()) {
+                        ESP_LOGI(TAG, "Upload via MQTT weight=%.1f", data.weight);
+                        mqtt_handler_publish_weight(&data);
+                        last_post = now;
+                    } else {
+                        ESP_LOGW(TAG, "Skip upload: MQTT not connected");
+                    }
                 }
             }
         }
 
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(200));
     }
 }
 

@@ -42,12 +42,17 @@ CmdRequest protocolParse(const String& json) {
     return req;
 }
 
-String protocolBuildAck(const String& cmdName, bool success, const String& requestId) {
-    StaticJsonDocument<256> doc;
+String protocolBuildAck(const String& cmdName, bool success, const String& requestId, const char* data) {
+    StaticJsonDocument<512> doc;
     doc["event"] = "cmd_ack";
     doc["cmd"] = cmdName;
     doc["success"] = success;
     doc["request_id"] = requestId;
+    if (data && strlen(data) > 0) {
+        StaticJsonDocument<384> dataDoc;
+        deserializeJson(dataDoc, data);
+        doc["data"] = dataDoc.as<JsonObject>();
+    }
     String out;
     serializeJson(doc, out);
     return out;

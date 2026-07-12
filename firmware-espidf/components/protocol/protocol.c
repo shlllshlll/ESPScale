@@ -20,7 +20,7 @@ static const char *CMD_NAMES[] = {
 };
 
 // Simple JSON string extraction helper
-static bool json_get_string(const char *json, const char *key, char *value, size_t value_len) {
+bool protocol_json_get_string(const char *json, const char *key, char *value, size_t value_len) {
     char search[64];
     snprintf(search, sizeof(search), "\"%s\":\"", key);
 
@@ -56,7 +56,7 @@ static bool json_get_string(const char *json, const char *key, char *value, size
 }
 
 // Simple JSON number extraction helper
-static bool json_get_number(const char *json, const char *key, double *value) {
+bool protocol_json_get_number(const char *json, const char *key, double *value) {
     char search[64];
     snprintf(search, sizeof(search), "\"%s\":", key);
 
@@ -79,7 +79,7 @@ cmd_request_t protocol_parse(const char *json) {
     strncpy(req.raw_json, json, sizeof(req.raw_json) - 1);
 
     char cmd_str[32] = {0};
-    if (json_get_string(json, "cmd", cmd_str, sizeof(cmd_str))) {
+    if (protocol_json_get_string(json, "cmd", cmd_str, sizeof(cmd_str))) {
         for (int i = 1; i < sizeof(CMD_NAMES) / sizeof(CMD_NAMES[0]); i++) {
             if (strcmp(cmd_str, CMD_NAMES[i]) == 0) {
                 req.type = (cmd_type_t)i;
@@ -92,7 +92,7 @@ cmd_request_t protocol_parse(const char *json) {
     }
 
     char request_id[37] = {0};
-    if (json_get_string(json, "request_id", request_id, sizeof(request_id))) {
+    if (protocol_json_get_string(json, "request_id", request_id, sizeof(request_id))) {
         strncpy(req.request_id, request_id, sizeof(req.request_id) - 1);
     }
 

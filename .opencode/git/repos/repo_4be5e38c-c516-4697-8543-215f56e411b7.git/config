@@ -1,0 +1,11 @@
+[core]
+	repositoryformatversion = 0
+	filemode = false
+	bare = true
+	ignorecase = true
+	precomposeunicode = true
+	autocrlf = false
+[advice]
+	detachedHead = false
+[gc]
+	auto = 0

@@ -11,7 +11,7 @@ ESPScale 是基于 ESP32-C3 + HX711 的物联网称重系统，采用 BLE + WiFi
 | 模块 | Phase | 状态 | 核心完成度 |
 |------|-------|------|-----------|
 | firmware/ | Phase 1-2 | ✅ 已实现 | BLE 配网 + NVS + MQTT + HTTP + 9 命令 + 状态机 |
-| server/ | Phase 3 | ✅ 已实现 | REST API + WebSocket + MQTT Bridge + Docker |
+| server/ | Phase 3 | ✅ 已实现 | REST API + WebSocket + 内嵌 amqtt + Alembic |
 | app/ | Phase 4 | ✅ 已实现 | BLE 配网 + 实时称重 + 图表 + 设备管理 |
 
 ### 待修复 / 待完成项
@@ -70,7 +70,7 @@ ESPScale 是基于 ESP32-C3 + HX711 的物联网称重系统，采用 BLE + WiFi
 | 数据校验 | Pydantic v2 | FastAPI 内置，类型安全 |
 | MQTT 客户端 | paho-mqtt v2 | Python MQTT 标准库，v2 API (CallbackAPIVersion.VERSION2) |
 | 认证 | python-jose (JWT) | 用户认证；设备用 API Key (SHA256) |
-| 部署 | Docker Compose | Mosquitto + FastAPI 一键部署 |
+| 部署 | uvicorn 直接运行 | 内嵌 amqtt，无需 Docker / Mosquitto |
 | 迁移 | Alembic | SQLAlchemy 配套迁移工具 (⚠️ 尚未配置) |
 
 ### APP 端 (app/)
@@ -271,8 +271,8 @@ cd firmware && ~/.platformio/penv/bin/pio run -t upload    # 编译并烧录
 cd firmware && ~/.platformio/penv/bin/pio device monitor   # 串口监视 (115200)
 
 # 服务端
-docker compose up -d                                       # 启动 Mosquitto + FastAPI
-open http://localhost:8000/docs                            # OpenAPI 文档
+cd server && source .venv/bin/activate && uvicorn main:app --host 0.0.0.0 --port 8000
+open http://localhost:8000/docs                            # OpenAPI 文档（MQTT :1883 内嵌）
 
 # APP
 cd app && flutter pub get && flutter run                   # 运行 (默认平台)

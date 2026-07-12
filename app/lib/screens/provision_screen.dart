@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config.dart';
+import '../generated/secrets.dart' show kMqttUser, kMqttPass;
 import '../providers/app_providers.dart';
 import '../services/api_service.dart';
 import '../services/ble_service.dart';
@@ -200,32 +201,38 @@ class _ProvisionScreenState extends ConsumerState<ProvisionScreen> {
       serverUrl: _serverUrlCtrl.text.trim(),
       mqttHost: _mqttHostCtrl.text.trim(),
       mqttPort: int.tryParse(_mqttPortCtrl.text.trim()) ?? 1883,
+      mqttUser: kMqttUser,
+      mqttPass: kMqttPass,
     );
 
-    if (mounted) {
-      if (result.success) {
-        // Save credentials for next time
-        await _saveCredentials();
+    if (!mounted) return;
+    if (result.success) {
+      // Save credentials for next time
+      await _saveCredentials();
 
-        // Send the API key to firmware via set_config so it can authenticate with server
-        try {
-          await ble.sendCommand('set_config', {
-            'api_key': _apiKey,
-          }, 'apikey-${DateTime.now().millisecondsSinceEpoch}');
-        } catch (_) {
-          // Non-fatal — firmware will have empty API key, HTTP auth will fail
-          // but the device is still usable via BLE
-        }
+      // Send the API key to firmware via set_config so it can authenticate with server
+      try {
+        await ble.sendCommand('set_config', {
+          'api_key': _apiKey,
+        }, 'apikey-${DateTime.now().millisecondsSinceEpoch}');
+      } catch (_) {
+        // Non-fatal — firmware will have empty API key, HTTP auth will fail
+        // but the device is still usable via BLE
+      }
 
-        setState(() => _step = 3);
-      } else {
+      if (mounted) {
         setState(() {
-          _error = result.error;
-          _step = 1;
+          _step = 3;
+          _loading = false;
         });
       }
+    } else if (mounted) {
+      setState(() {
+        _error = result.error;
+        _step = 1;
+        _loading = false;
+      });
     }
-    setState(() => _loading = false);
   }
 
   /// Step 3→finish: Register device on server and navigate to detail page.

@@ -1,5 +1,6 @@
 idf_component_register(
     SRCS "mqtt_handler.c"
     INCLUDE_DIRS "include"
-    REQUIRES lwip storage protocol
+    PRIV_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/../../src"
+    REQUIRES mqtt storage protocol
 )

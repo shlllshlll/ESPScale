@@ -73,5 +73,14 @@ class SavedMeasurementStore {
     }
   }
 
+  /// Clear all locally saved measurements for every device.
+  static Future<void> clearAll() async {
+    final prefs = await SharedPreferences.getInstance();
+    final keys = prefs.getKeys().where((k) => k.startsWith('${_kKey}_')).toList();
+    for (final k in keys) {
+      await prefs.remove(k);
+    }
+  }
+
   static String _kKeyFor(String deviceId) => '${_kKey}_$deviceId';
 }

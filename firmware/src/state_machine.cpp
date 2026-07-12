@@ -54,6 +54,9 @@ void stateMachineTick(unsigned long nowMs) {
         if (ws == WifiState::CONNECTED) {
             sMqttStarted = false;
             if (cfg.mode == MODE_MQTT) {
+                mqttClientReset();
+                mqttClientConnect();
+                sMqttStarted = true;
                 stateMachineSetState(DeviceState::CONNECTING_MQTT);
             } else {
                 stateMachineSetState(DeviceState::RUNNING);
@@ -65,6 +68,10 @@ void stateMachineTick(unsigned long nowMs) {
     }
 
     case DeviceState::CONNECTING_MQTT: {
+        if (!sMqttStarted) {
+            mqttClientConnect();
+            sMqttStarted = true;
+        }
         MqttClientState ms = mqttClientGetState();
         if (ms == MqttClientState::CONNECTED) {
             stateMachineSetState(DeviceState::RUNNING);
@@ -103,6 +110,9 @@ void stateMachineTick(unsigned long nowMs) {
         if (wifiManagerGetState() == WifiState::CONNECTED) {
             sMqttStarted = false;
             if (cfg.mode == MODE_MQTT) {
+                mqttClientReset();
+                mqttClientConnect();
+                sMqttStarted = true;
                 stateMachineSetState(DeviceState::CONNECTING_MQTT);
             } else {
                 stateMachineSetState(DeviceState::RUNNING);
@@ -112,11 +122,16 @@ void stateMachineTick(unsigned long nowMs) {
 
     case DeviceState::ERROR_MQTT:
         if (wifiManagerGetState() != WifiState::CONNECTED) {
+            sMqttStarted = false;
             stateMachineSetState(DeviceState::ERROR_WIFI);
             break;
         }
         if (mqttClientGetState() == MqttClientState::CONNECTED) {
             stateMachineSetState(DeviceState::RUNNING);
+        } else if (mqttClientGetState() == MqttClientState::DISCONNECTED) {
+            mqttClientConnect();
+            sMqttStarted = true;
+            stateMachineSetState(DeviceState::CONNECTING_MQTT);
         }
         break;
 

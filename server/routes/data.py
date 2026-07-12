@@ -1,6 +1,7 @@
 import csv
 import datetime
 import io
+import logging
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
@@ -8,36 +9,28 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
+from deps import get_app_auth, get_device_auth
 from models import Device, Event, WeightRecord
 from schemas import WeightBatch, WeightData, WeightRecordResponse, WeightStats
 
 router = APIRouter(tags=["data"])
-
-
-async def _auth_device(
-    x_device_id: str = Header(alias="X-Device-ID"),
-    x_api_key: str = Header(alias="X-API-Key"),
-    db: AsyncSession = Depends(get_db),
-) -> Device:
-    if not x_device_id or not x_api_key:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing device auth")
-    result = await db.execute(select(Device).where(Device.device_id == x_device_id))
-    device = result.scalar_one_or_none()
-    if device is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unknown device")
-    from auth import verify_api_key
-
-    if not verify_api_key(x_api_key, device.api_key_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
-    return device
+logger = logging.getLogger("server.data")
 
 
 @router.post("/api/v1/data", status_code=status.HTTP_201_CREATED)
 async def ingest_weight(
     body: WeightData,
-    device: Device = Depends(_auth_device),
+    device: Device = Depends(get_device_auth),
     db: AsyncSession = Depends(get_db),
 ):
+    logger.info(
+        "HTTP ingest device=%s weight=%.2f%s stable=%s seq=%s",
+        device.device_id,
+        body.weight,
+        body.unit or "g",
+        body.stable,
+        body.seq,
+    )
     ts = datetime.datetime.fromtimestamp(body.timestamp, tz=datetime.timezone.utc)
     record = WeightRecord(
         device_id=device.device_id,
@@ -75,7 +68,7 @@ async def ingest_weight(
 @router.post("/api/v1/data/batch", status_code=status.HTTP_201_CREATED)
 async def ingest_weight_batch(
     body: WeightBatch,
-    device: Device = Depends(_auth_device),
+    device: Device = Depends(get_device_auth),
     db: AsyncSession = Depends(get_db),
 ):
     now = datetime.datetime.now(datetime.timezone.utc)
@@ -127,6 +120,7 @@ async def get_records(
     to_ts: int | None = Query(default=None, alias="to"),
     limit: int = Query(default=100, le=1000),
     offset: int = Query(default=0),
+    _=Depends(get_app_auth),
 ):
     stmt = (
         select(WeightRecord)
@@ -149,7 +143,7 @@ async def get_records(
 
 
 @router.get("/api/v1/devices/{device_id}/records/latest", response_model=WeightRecordResponse | None)
-async def get_latest_record(device_id: str, db: AsyncSession = Depends(get_db)):
+async def get_latest_record(device_id: str, db: AsyncSession = Depends(get_db), _=Depends(get_app_auth)):
     result = await db.execute(
         select(WeightRecord)
         .where(WeightRecord.device_id == device_id)
@@ -165,6 +159,7 @@ async def get_stats(
     db: AsyncSession = Depends(get_db),
     from_ts: int | None = Query(default=None, alias="from"),
     to_ts: int | None = Query(default=None, alias="to"),
+    _=Depends(get_app_auth),
 ):
     stmt = select(
         func.min(WeightRecord.weight),
@@ -193,6 +188,7 @@ async def export_csv(
     db: AsyncSession = Depends(get_db),
     from_ts: int | None = Query(default=None, alias="from"),
     to_ts: int | None = Query(default=None, alias="to"),
+    _=Depends(get_app_auth),
 ):
     stmt = (
         select(WeightRecord)

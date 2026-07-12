@@ -37,7 +37,7 @@ class WeightRecord(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     device_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("devices.device_id"), nullable=False, index=True
+        String(64), ForeignKey("devices.device_id", ondelete="CASCADE"), nullable=False, index=True
     )
     weight: Mapped[float] = mapped_column(Float, nullable=False)
     unit: Mapped[str] = mapped_column(String(8), default="g")

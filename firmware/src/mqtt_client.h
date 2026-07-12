@@ -7,3 +7,5 @@ void mqttClientBegin();
 void mqttClientTick();
 MqttClientState mqttClientGetState();
 bool mqttClientPublishWeight(float weight, const String& unit, bool stable);
+void mqttClientConnect();
+void mqttClientReset();

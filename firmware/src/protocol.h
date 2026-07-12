@@ -23,5 +23,5 @@ struct CmdRequest {
 
 const char* commandName(Command cmd);
 CmdRequest protocolParse(const String& json);
-String protocolBuildAck(const String& cmdName, bool success, const String& requestId);
+String protocolBuildAck(const String& cmdName, bool success, const String& requestId, const char* data = nullptr);
 String protocolBuildWeight(float weight, const String& unit, bool stable, uint32_t seq);

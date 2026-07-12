@@ -96,6 +96,14 @@
 #define DEFAULT_UNIT                "g"
 #define DEFAULT_UPLOAD_INTERVAL_MS  5000
 #define DEFAULT_MQTT_PORT           1883
+#define DEFAULT_MODE                MODE_BLE_ONLY
+
+#ifndef DEFAULT_MQTT_USER
+#define DEFAULT_MQTT_USER            ""
+#endif
+#ifndef DEFAULT_MQTT_PASS
+#define DEFAULT_MQTT_PASS            ""
+#endif
 
 // ============================================================================
 // JSON Buffer Size

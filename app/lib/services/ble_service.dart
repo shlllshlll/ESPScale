@@ -227,6 +227,8 @@ class BleService {
     String serverUrl = '',
     String mqttHost = '',
     int mqttPort = 1883,
+    String mqttUser = '',
+    String mqttPass = '',
   }) async {
     try {
       final deviceInfo = await readCharacteristic(AppConfig.charDeviceInfo);
@@ -234,7 +236,6 @@ class BleService {
       final bool needsWifi = mode != 2 && ssid.isNotEmpty;
 
       if (needsWifi) {
-        // Send WiFi creds + extended config in one JSON write
         await writeCharacteristic(AppConfig.charWifiCreds, {
           'ssid': ssid,
           'password': password,
@@ -242,14 +243,17 @@ class BleService {
           'server_url': serverUrl,
           'mqtt_host': mqttHost,
           'mqtt_port': mqttPort,
+          'mqtt_user': mqttUser,
+          'mqtt_pass': mqttPass,
         });
       } else {
-        // BLE-only or no WiFi: send config via command channel only
         await sendCommand('set_config', {
           'mode': mode,
           'server_url': serverUrl,
           'mqtt_host': mqttHost,
           'mqtt_port': mqttPort,
+          'mqtt_user': mqttUser,
+          'mqtt_pass': mqttPass,
         }, 'prov-${DateTime.now().millisecondsSinceEpoch}');
       }
 
@@ -260,14 +264,20 @@ class BleService {
 
       final completer = Completer<ProvisionResult>();
 
+      bool isWifiConnected(Map<String, dynamic> status) {
+        // Firmware (espidf): {"wifi_connected": true, "ip": "...", "rssi": -50}
+        // Older nested shape: {"wifi": {"connected": true, ...}}
+        if (status['wifi_connected'] == true) return true;
+        final wifi = status['wifi'];
+        if (wifi is Map && wifi['connected'] == true) return true;
+        return false;
+      }
+
       // Subscribe to notifications
       StreamSubscription? notifySub;
       notifySub = notifyCharacteristic(AppConfig.charNetworkStatus).listen((status) {
-        final wifi = status['wifi'] as Map<String, dynamic>?;
-        if (wifi != null && wifi['connected'] == true) {
-          if (!completer.isCompleted) {
-            completer.complete(ProvisionResult(success: true, deviceId: deviceId));
-          }
+        if (isWifiConnected(status) && !completer.isCompleted) {
+          completer.complete(ProvisionResult(success: true, deviceId: deviceId));
         }
       });
 
@@ -279,11 +289,8 @@ class BleService {
           return;
         }
         readCharacteristic(AppConfig.charNetworkStatus).then((status) {
-          final wifi = status['wifi'] as Map<String, dynamic>?;
-          if (wifi != null && wifi['connected'] == true) {
-            if (!completer.isCompleted) {
-              completer.complete(ProvisionResult(success: true, deviceId: deviceId));
-            }
+          if (isWifiConnected(status) && !completer.isCompleted) {
+            completer.complete(ProvisionResult(success: true, deviceId: deviceId));
           }
         }).catchError((_) {}); // Ignore read errors during polling
       });

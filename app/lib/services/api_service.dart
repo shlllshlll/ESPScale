@@ -10,14 +10,19 @@ import '../config.dart';
 
 class ApiService {
   final String baseUrl;
+  final String appApiKey;
   late final Dio _dio;
 
-  ApiService({required this.baseUrl}) {
+  ApiService({required this.baseUrl, this.appApiKey = ''}) {
+    final headers = <String, dynamic>{'Content-Type': 'application/json'};
+    if (appApiKey.isNotEmpty) {
+      headers['X-API-Key'] = appApiKey;
+    }
     _dio = Dio(BaseOptions(
       baseUrl: baseUrl,
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 15),
-      headers: {'Content-Type': 'application/json'},
+      headers: headers,
     ));
   }
 
@@ -85,5 +90,6 @@ class ApiService {
 final apiServiceProvider = Provider<ApiService>((ref) {
   final config = ref.watch(serverConfigProvider);
   final baseUrl = config.value?.apiBaseUrl ?? getDefaultApiBaseUrl();
-  return ApiService(baseUrl: baseUrl);
+  final apiKey = config.value?.appApiKey ?? '';
+  return ApiService(baseUrl: baseUrl, appApiKey: apiKey);
 });

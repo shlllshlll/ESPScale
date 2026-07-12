@@ -42,11 +42,25 @@ class AppConfig {
 class ServerConfig {
   final String apiBaseUrl;
   final String wsBaseUrl;
+  final String appApiKey;
 
   const ServerConfig({
     required this.apiBaseUrl,
     required this.wsBaseUrl,
+    this.appApiKey = '',
   });
 
   bool get isDefault => apiBaseUrl == getDefaultApiBaseUrl();
+
+  ServerConfig copyWith({
+    String? apiBaseUrl,
+    String? wsBaseUrl,
+    String? appApiKey,
+  }) {
+    return ServerConfig(
+      apiBaseUrl: apiBaseUrl ?? this.apiBaseUrl,
+      wsBaseUrl: wsBaseUrl ?? this.wsBaseUrl,
+      appApiKey: appApiKey ?? this.appApiKey,
+    );
+  }
 }

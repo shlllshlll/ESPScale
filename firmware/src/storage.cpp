@@ -12,8 +12,8 @@ void storageBegin() {
     sConfig.wifiPass = p.getString("wifi_pass", "");
     sConfig.mqttHost = p.getString("mqtt_host", "");
     sConfig.mqttPort = p.getUShort("mqtt_port", 1883);
-    sConfig.mqttUser = p.getString("mqtt_user", "");
-    sConfig.mqttPass = p.getString("mqtt_pass", "");
+    sConfig.mqttUser = p.getString("mqtt_user", DEFAULT_MQTT_USER);
+    sConfig.mqttPass = p.getString("mqtt_pass", DEFAULT_MQTT_PASS);
     sConfig.mqttTopic = p.getString("mqtt_topic", "espscale");
     sConfig.serverUrl = p.getString("server_url", "");
     sConfig.deviceId = p.getString("device_id", "");
@@ -21,7 +21,7 @@ void storageBegin() {
     sConfig.calFactor = p.getFloat("cal_factor", 397.6f);
     sConfig.unit = p.getString("unit", "g");
     sConfig.uploadIntervalMs = p.getUInt("upload_ms", 5000);
-    sConfig.mode = p.getUChar("mode", 0);
+    sConfig.mode = p.getUChar("mode", DEFAULT_MODE);
     sConfig.apiKey = p.getString("api_key", "");
     sConfig.cfgVersion = p.getUChar("cfg_version", 1);
     p.end();

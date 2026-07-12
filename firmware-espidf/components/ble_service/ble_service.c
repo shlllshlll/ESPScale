@@ -267,7 +267,9 @@ static int wifi_creds_access(uint16_t conn_handle, uint16_t attr_handle,
                               struct ble_gatt_access_ctxt *ctxt, void *arg) {
     if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR) {
         uint16_t om_len = OS_MBUF_PKTLEN(ctxt->om);
-        char buf[256];
+        // Provision payload includes mqtt_user/pass + server_url — 256 is too small.
+        char buf[512];
+        if (om_len >= sizeof(buf)) om_len = sizeof(buf) - 1;
         os_mbuf_copydata(ctxt->om, 0, om_len, buf);
         buf[om_len] = '\0';
 
@@ -290,6 +292,25 @@ static int wifi_creds_access(uint16_t conn_handle, uint16_t attr_handle,
         char server_url[128] = {0};
         if (json_get_string(buf, "server_url", server_url, sizeof(server_url))) {
             storage_save_server_url(server_url);
+        }
+
+        // Extended MQTT config (from APP provision payload)
+        char mqtt_host[64] = {0};
+        if (json_get_string(buf, "mqtt_host", mqtt_host, sizeof(mqtt_host))) {
+            char mqtt_user[32] = {0};
+            char mqtt_pass[64] = {0};
+            double mqtt_port;
+            json_get_string(buf, "mqtt_user", mqtt_user, sizeof(mqtt_user));
+            json_get_string(buf, "mqtt_pass", mqtt_pass, sizeof(mqtt_pass));
+            mqtt_config_t mqtt_cfg = {0};
+            strncpy(mqtt_cfg.host, mqtt_host, sizeof(mqtt_cfg.host) - 1);
+            mqtt_cfg.port = json_get_number(buf, "mqtt_port", &mqtt_port)
+                                ? (uint16_t)mqtt_port
+                                : DEFAULT_MQTT_PORT;
+            strncpy(mqtt_cfg.user, mqtt_user, sizeof(mqtt_cfg.user) - 1);
+            strncpy(mqtt_cfg.pass, mqtt_pass, sizeof(mqtt_cfg.pass) - 1);
+            storage_save_mqtt_config(&mqtt_cfg);
+            ESP_LOGI(TAG, "MQTT config set: %s:%d", mqtt_host, mqtt_cfg.port);
         }
 
         return 0;

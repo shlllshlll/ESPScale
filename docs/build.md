@@ -62,57 +62,35 @@ esptool.py --chip esp32c3 write_flash 0x0 firmware_merged.bin
 
 ---
 
-## 服务端 (server/) — Docker
+## 服务端 (server/) — 直接运行
 
-### 开发运行
+完整说明见 [environment.md](environment.md) §5。**不使用 Docker。**
 
 ```bash
 cd server
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-# 环境变量 (可选)
-export DATABASE_URL=sqlite+aiosqlite:///espscale.db
-export MQTT_BROKER_HOST=localhost
-export MQTT_BROKER_PORT=1883
-export SECRET_KEY=your-secret-here
+set -a && source ../secrets/server.env && set +a   # 可选
 
+# 开发
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+# 生产（workers 必须为 1）
+uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1
 ```
 
-### Docker Compose 部署 (推荐)
+| 端口 | 说明 |
+|------|------|
+| `8000` | FastAPI / WebSocket / `/docs` |
+| `1883` | 内嵌 amqtt MQTT Broker |
 
-```bash
-# 项目根目录
-docker compose up -d
+生产注意：
 
-# 查看服务状态
-docker compose ps
-
-# 查看日志
-docker compose logs -f server
-docker compose logs -f mosquitto
-
-# 更新部署
-docker compose build server
-docker compose up -d --force-recreate server
-
-# 完全清理 (含数据卷)
-docker compose down -v
-```
-
-服务端口：
-- FastAPI: `http://localhost:8000`
-- API 文档: `http://localhost:8000/docs`
-- Mosquitto MQTT: `1883`
-- Mosquitto WebSocket: `9001` (可选)
-
-### 生产环境注意事项
-
-1. **必须**修改 `docker-compose.yml` 中的 `SECRET_KEY` (JWT 签名密钥)
-2. Mosquitto 建议添加 `password_file` 认证配置
-3. SQLite 数据文件 `./data/espscale.db` 通过卷挂载持久化
-4. 加上 Nginx / Caddy 反向代理终止 HTTPS
-5. 当前 `register` 端点已支持幂等更新 (重复配网可更新 api_key)
+1. 配置强 `SECRET_KEY`、`APP_API_KEY`、`MQTT_USER`/`MQTT_PASS`
+2. SQLite 文件默认 `server/espscale.db`（可用 `DATABASE_URL` 改路径）
+3. 反向代理 HTTPS（Caddy / Nginx）
+4. `MQTT_ENABLED=false` 可关闭 MQTT，仅保留 HTTP
 
 ---
 
@@ -260,9 +238,10 @@ flutter test integration_test/
 
 ## 端到端集成测试流程
 
-1. **启动基础设施**
+1. **启动服务端**
    ```bash
-   docker compose up -d
+   cd server && source .venv/bin/activate
+   uvicorn main:app --host 0.0.0.0 --port 8000
    ```
 
 2. **烧录固件** → ESP32-C3 启动 → 串口监视确认 PROVISIONING 状态

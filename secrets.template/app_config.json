@@ -1,0 +1,5 @@
+{
+  "app_api_key": "change-me-to-a-random-32-char-string",
+  "mqtt_user": "espscale",
+  "mqtt_pass": "change-me-to-a-secure-mqtt-password"
+}

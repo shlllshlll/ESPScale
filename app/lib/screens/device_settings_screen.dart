@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../config.dart';
 import '../services/api_service.dart';
+import '../services/ble_service.dart';
 import '../providers/app_providers.dart';
 
 class DeviceSettingsScreen extends ConsumerStatefulWidget {
@@ -85,6 +87,31 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
       'server_url': _mode == 0 ? _serverUrlCtrl.text.trim() : '',
       'mqtt_broker': mqttBroker,
     });
+
+    // If BLE is connected, also push mode change to firmware
+    final ble = ref.read(bleServiceProvider);
+    if (ble.connectedDevice != null) {
+      try {
+        final params = <String, dynamic>{
+          'mode': _mode,
+          'upload_interval_ms': _uploadInterval,
+          'unit': _unitCtrl.text.trim(),
+        };
+        if (_mode == 0) params['server_url'] = _serverUrlCtrl.text.trim();
+        if (_mode == 1) {
+          params['mqtt_host'] = _mqttHostCtrl.text.trim();
+          params['mqtt_port'] = int.tryParse(_mqttPortCtrl.text.trim()) ?? 1883;
+        }
+        await ble.sendCommand(
+          'set_config',
+          params,
+          'settings-${DateTime.now().millisecondsSinceEpoch}',
+        );
+      } catch (_) {
+        // Non-fatal if BLE not available
+      }
+    }
+
     await ref.read(deviceListProvider.notifier).refresh();
     if (mounted) Navigator.pop(context);
   }

@@ -43,6 +43,8 @@ char *protocol_build_device_info(const char *device_id, const char *device_name,
 char *protocol_build_network_status(bool wifi_connected, const char *ip,
                                      int8_t rssi, bool mqtt_connected);
 const char *protocol_cmd_name(cmd_type_t cmd);
+bool protocol_json_get_string(const char *json, const char *key, char *value, size_t value_len);
+bool protocol_json_get_number(const char *json, const char *key, double *value);
 
 #ifdef __cplusplus
 }

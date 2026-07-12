@@ -70,7 +70,9 @@
 // ============================================================================
 // Task Stack Sizes
 // ============================================================================
-#define SCALE_TASK_STACK_SIZE       3072
+// scale_task holds cmd_request_t (512B raw_json) + stored_config_t + large
+// set_config/set_mqtt locals; 3072 overflows (Stack protection fault).
+#define SCALE_TASK_STACK_SIZE       8192
 #define BLE_TASK_STACK_SIZE         8192
 #define NETWORK_TASK_STACK_SIZE     4096
 #define STATE_TASK_STACK_SIZE       2048
@@ -86,7 +88,8 @@
 // ============================================================================
 // Queue Sizes
 // ============================================================================
-#define WEIGHT_QUEUE_SIZE           8
+// Length 1 + xQueueOverwrite = "latest sample" mailbox (required by FreeRTOS).
+#define WEIGHT_QUEUE_SIZE           1
 #define CMD_QUEUE_SIZE              4
 
 // ============================================================================
@@ -96,6 +99,14 @@
 #define DEFAULT_UNIT                "g"
 #define DEFAULT_UPLOAD_INTERVAL_MS  5000
 #define DEFAULT_MQTT_PORT           1883
+#define DEFAULT_MODE                MODE_BLE_ONLY
+
+#ifndef DEFAULT_MQTT_USER
+#define DEFAULT_MQTT_USER            ""
+#endif
+#ifndef DEFAULT_MQTT_PASS
+#define DEFAULT_MQTT_PASS            ""
+#endif
 
 // ============================================================================
 // JSON Buffer Size

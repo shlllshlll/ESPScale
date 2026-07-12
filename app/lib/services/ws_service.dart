@@ -19,14 +19,18 @@ class WsService {
   Stream<Map<String, dynamic>> get weightStream => _weightController.stream;
   Stream<Map<String, dynamic>> get statusStream => _statusController.stream;
 
-  void connect({required String deviceId, required String wsBaseUrl}) {
-    if (_currentDeviceId == deviceId) return; // Already connected to this device
+  void connect({required String deviceId, required String wsBaseUrl, String apiKey = ''}) {
+    if (_currentDeviceId == deviceId) return;
     _disconnect();
 
     _currentDeviceId = deviceId;
 
     try {
-      final uri = Uri.parse('$wsBaseUrl/ws/$deviceId');
+      var wsUrl = '$wsBaseUrl/ws/$deviceId';
+      if (apiKey.isNotEmpty) {
+        wsUrl += '?api_key=$apiKey';
+      }
+      final uri = Uri.parse(wsUrl);
       _channel = WebSocketChannel.connect(uri);
       _channel!.stream.listen(
         (data) {

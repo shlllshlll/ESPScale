@@ -9,15 +9,16 @@ Thumbs.db
 __pycache__/
 *.pyc
 
-# Data (SQLite DB, Mosquitto persistence)
+# Data (SQLite DB)
 data/
+server/espscale.db
+server/*.db-wal
+server/*.db-shm
 
-# Docker
-.mosquitto_data/
+*.log
 
 # Flutter devtools local config
 app/devtools_options.yaml
 
-# Local SQLite database
-server/espscale.db
-.opencode
+# Secrets — real values, never commit
+secrets/

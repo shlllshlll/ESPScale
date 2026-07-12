@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include "config.h"
 
 struct StoredConfig {
     String wifiSsid;
@@ -15,7 +16,7 @@ struct StoredConfig {
     float calFactor = 397.6f;
     String unit = "g";
     uint32_t uploadIntervalMs = 5000;
-    uint8_t mode = 0;  // 0=HTTP_DIRECT, 1=MQTT, 2=BLE_ONLY
+    uint8_t mode = DEFAULT_MODE;  // 0=HTTP_DIRECT, 1=MQTT, 2=BLE_ONLY
     String apiKey;
     uint8_t cfgVersion = 1;
 };

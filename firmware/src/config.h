@@ -38,6 +38,7 @@ constexpr const char* DEFAULT_SERVER_URL = "http://espscale.shlll.top";
 constexpr uint8_t MODE_HTTP_DIRECT = 0;
 constexpr uint8_t MODE_MQTT = 1;
 constexpr uint8_t MODE_BLE_ONLY = 2;
+constexpr uint8_t DEFAULT_MODE = MODE_BLE_ONLY;
 
 // --- HTTP ---
 constexpr unsigned long HTTP_TIMEOUT_MS = 10000;
@@ -47,6 +48,13 @@ constexpr unsigned long HTTP_POST_INTERVAL_MS = 5000;
 constexpr unsigned long MQTT_CONNECT_TIMEOUT_MS = 10000;
 constexpr unsigned long MQTT_RECONNECT_BASE_MS = 5000;
 constexpr uint8_t MQTT_MAX_RETRY = 3;
+
+#ifndef DEFAULT_MQTT_USER
+#define DEFAULT_MQTT_USER ""
+#endif
+#ifndef DEFAULT_MQTT_PASS
+#define DEFAULT_MQTT_PASS ""
+#endif
 
 // --- NVS ---
 constexpr const char* NVS_NAMESPACE = "espscale";
